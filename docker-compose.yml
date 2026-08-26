@@ -1,0 +1,156 @@
+name: finscope-completo-v3
+
+services:
+  database:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    command: ["postgres", "-c", "password_encryption=scram-sha-256"]
+    environment:
+      POSTGRES_DB: finscope
+      POSTGRES_USER: finscope
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Defina POSTGRES_PASSWORD no arquivo .env}
+      POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256
+    volumes:
+      - finscope_data:/var/lib/postgresql/data
+      - finscope_socket:/var/run/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U finscope"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - backend
+
+  database_password_sync:
+    image: postgres:17-alpine
+    restart: "no"
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m
+    environment:
+      FIN_SCOPE_DATABASE_PASSWORD: ${POSTGRES_PASSWORD:?Defina POSTGRES_PASSWORD no arquivo .env}
+      FIN_SCOPE_APP_DATABASE_PASSWORD: ${POSTGRES_APP_PASSWORD:?Defina POSTGRES_APP_PASSWORD no arquivo .env}
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - |
+        psql -h /var/run/postgresql -U finscope -d finscope \
+          --set=ON_ERROR_STOP=1 \
+          --set="owner_password=$${FIN_SCOPE_DATABASE_PASSWORD}" \
+          --set="app_password=$${FIN_SCOPE_APP_DATABASE_PASSWORD}" <<'SQL'
+        ALTER ROLE finscope WITH PASSWORD :'owner_password';
+        SELECT format(
+          'CREATE ROLE finscope_app LOGIN PASSWORD %L NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS',
+          :'app_password'
+        )
+        WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'finscope_app')
+        \gexec
+        ALTER ROLE finscope_app WITH LOGIN PASSWORD :'app_password'
+          NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS;
+        GRANT CONNECT ON DATABASE finscope TO finscope_app;
+        GRANT USAGE ON SCHEMA public TO finscope_app;
+        REVOKE CREATE ON SCHEMA public FROM PUBLIC;
+        SQL
+    volumes:
+      - finscope_socket:/var/run/postgresql
+    depends_on:
+      database:
+        condition: service_healthy
+    network_mode: none
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+  database_migrate:
+    build: .
+    command: ["python", "-m", "jobs.init_database"]
+    restart: "no"
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=32m
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      DATABASE_URL: postgresql+psycopg://finscope:${POSTGRES_PASSWORD:?Defina POSTGRES_PASSWORD no arquivo .env}@database:5432/finscope
+      DATABASE_MIGRATIONS_ENABLED: "true"
+      APP_DATABASE_ROLE: finscope_app
+    depends_on:
+      database:
+        condition: service_healthy
+      database_password_sync:
+        condition: service_completed_successfully
+    networks:
+      - backend
+
+  mailpit:
+    image: axllent/mailpit:latest
+    ports:
+      - "127.0.0.1:8025:8025"
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - backend
+
+  app:
+    build: .
+    ports:
+      - "${APP_BIND_ADDRESS:-127.0.0.1}:8501:8501"
+    volumes:
+      - .:/app:ro
+    restart: unless-stopped
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=128m
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      DATABASE_URL: postgresql+psycopg://finscope_app:${POSTGRES_APP_PASSWORD:?Defina POSTGRES_APP_PASSWORD no arquivo .env}@database:5432/finscope
+      DATABASE_MIGRATIONS_ENABLED: "false"
+      APP_ENV: ${APP_ENV:-development}
+      APP_BASE_URL: ${APP_BASE_URL:-http://localhost:8501}
+      BETA_MAX_USERS: ${BETA_MAX_USERS:-10}
+      BETA_ALLOWED_EMAILS: ${BETA_ALLOWED_EMAILS:-}
+      BETA_INVITE_CODE: ${BETA_INVITE_CODE:-}
+      LOGIN_MAX_ATTEMPTS: ${LOGIN_MAX_ATTEMPTS:-5}
+      LOGIN_LOCK_MINUTES: ${LOGIN_LOCK_MINUTES:-15}
+      BRAPI_BASE_URL: ${BRAPI_BASE_URL:-https://brapi.dev/api}
+      BRAPI_TOKEN: ${BRAPI_TOKEN:-}
+      YFINANCE_CACHE_DIR: /tmp/finscope-yfinance
+      STREAMLIT_BROWSER_GATHER_USAGE_STATS: "false"
+      STREAMLIT_SERVER_COOKIE_SECRET: ${STREAMLIT_SERVER_COOKIE_SECRET:?Defina STREAMLIT_SERVER_COOKIE_SECRET no arquivo .env}
+      SMTP_HOST: ${SMTP_HOST:-mailpit}
+      SMTP_PORT: ${SMTP_PORT:-1025}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_USE_TLS: ${SMTP_USE_TLS:-false}
+      SMTP_USE_SSL: ${SMTP_USE_SSL:-false}
+      EMAIL_FROM: ${EMAIL_FROM:-FinScope <no-reply@finscope.local>}
+      FEEDBACK_TO_EMAIL: ${FEEDBACK_TO_EMAIL:?Defina FEEDBACK_TO_EMAIL no arquivo .env}
+    depends_on:
+      database:
+        condition: service_healthy
+      database_migrate:
+        condition: service_completed_successfully
+      mailpit:
+        condition: service_started
+    networks:
+      - public
+      - backend
+
+volumes:
+  finscope_data:
+  finscope_socket:
+
+networks:
+  public:
+  backend:
+    internal: true

@@ -1,0 +1,13 @@
+.venv
+.git
+.env
+.env.*
+!.env.example
+.next
+node_modules
+outputs
+work
+__pycache__
+*.pyc
+*.db
+.yf-cache

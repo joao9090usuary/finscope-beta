@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title">
+  <title id="title">FinScope</title>
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#60a5fa"/>
+      <stop offset="1" stop-color="#7c3aed"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="#0f172a"/>
+  <path d="M112 344V168a40 40 0 0 1 40-40h208a40 40 0 0 1 40 40v176a40 40 0 0 1-40 40H152a40 40 0 0 1-40-40Z" fill="url(#g)"/>
+  <path d="M160 200h192M160 264h88M160 328h144" fill="none" stroke="#fff" stroke-width="30" stroke-linecap="round"/>
+  <circle cx="344" cy="264" r="28" fill="#34d399"/>
+</svg>
