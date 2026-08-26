@@ -137,7 +137,9 @@ As configurações ficam no arquivo `.env`, que não deve ser enviado ao GitHub.
 | `APP_BASE_URL` | Endereço utilizado nos links de recuperação | `http://localhost:8501` |
 | `APP_BIND_ADDRESS` | Interface de rede publicada pelo Docker | `127.0.0.1` |
 | `STREAMLIT_SERVER_COOKIE_SECRET` | Assinatura estável dos cookies do Streamlit | Obrigatória |
-| `SMTP_*` | Configuração do provedor de e-mail | Mailpit local |
+| `EMAIL_PROVIDER` | Provedor de e-mail (`smtp` ou `brevo`) | `smtp` |
+| `BREVO_API_KEY` | Chave secreta da API HTTPS usada no Render gratuito | Vazia |
+| `SMTP_*` | Configuração SMTP usada no Docker local | Mailpit local |
 | `FEEDBACK_TO_EMAIL` | Destino privado da caixa de comentários | Obrigatória |
 
 Para manter a beta fechada sem definir antecipadamente os e-mails, gere um valor
@@ -194,7 +196,7 @@ e manutenção.
 - A confirmação de recorrências é idempotente e evita duplicidade por data.
 - A aplicação conecta ao banco com o papel `finscope_app`, sem superusuário,
   `BYPASSRLS`, criação de banco ou criação de papéis.
-- A caixa de comentários envia texto simples por SMTP e não concede acesso global ao banco.
+- A caixa de comentários envia texto simples por SMTP ou pela API HTTPS da Brevo e não concede acesso global ao banco.
 - A exclusão da conta remove os dados vinculados e exige confirmação explícita.
 - Relatórios PDF são montados em memória no momento do download.
 - O PostgreSQL não publica a porta `5432` no computador hospedeiro.

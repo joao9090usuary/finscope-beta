@@ -17,7 +17,11 @@ from utils.database import (  # noqa: E402
     issue_auth_token,
     reset_password_token,
 )
-from utils.email_service import send_feedback_email, send_password_reset_email  # noqa: E402
+from utils.email_service import (  # noqa: E402
+    _send_brevo_api,
+    send_feedback_email,
+    send_password_reset_email,
+)
 
 
 class AuthFlowTest(unittest.TestCase):
@@ -89,8 +93,8 @@ class AuthFlowTest(unittest.TestCase):
         self.assertEqual(message, "Código de convite inválido.")
         self.assertIsNone(authenticate("sem-convite@example.com", "SenhaInicial123"))
 
-    @patch("utils.email_service._send_smtp")
-    def test_feedback_is_sent_to_private_recipient(self, send_smtp) -> None:
+    @patch("utils.email_service._send_email")
+    def test_feedback_is_sent_to_private_recipient(self, send_email) -> None:
         """O comentário deve usar o destino do ambiente e bloquear marcação ativa."""
         with patch.dict(
             os.environ,
@@ -102,13 +106,37 @@ class AuthFlowTest(unittest.TestCase):
                 "Gostaria de sugerir um novo filtro mensal.",
             )
             self.assertTrue(result.sent)
-            self.assertEqual(send_smtp.call_args.args[0], "responsavel@example.com")
+            self.assertEqual(send_email.call_args.args[0], "responsavel@example.com")
             with self.assertRaises(ValueError):
                 send_feedback_email(
                     "participante@example.com",
                     "Pessoa Beta",
                     "<script>alert('xss')</script>",
                 )
+
+    @patch("utils.email_service.requests.post")
+    def test_brevo_delivery_uses_https_without_exposing_key_in_payload(self, post) -> None:
+        """A credencial da Brevo deve seguir apenas no cabeçalho HTTPS."""
+        post.return_value.status_code = 201
+        with patch.dict(
+            os.environ,
+            {
+                "BREVO_API_KEY": "chave-brevo-de-teste",
+                "EMAIL_FROM": "FinScope <responsavel@example.com>",
+            },
+        ):
+            _send_brevo_api(
+                "participante@example.com",
+                "Teste do FinScope",
+                "Mensagem transacional de teste.",
+            )
+
+        url = post.call_args.args[0]
+        request = post.call_args.kwargs
+        self.assertEqual(url, "https://api.brevo.com/v3/smtp/email")
+        self.assertEqual(request["headers"]["api-key"], "chave-brevo-de-teste")
+        self.assertNotIn("chave-brevo-de-teste", str(request["json"]))
+        self.assertEqual(request["json"]["to"][0]["email"], "participante@example.com")
 
     def test_production_fails_closed_without_an_invite_configuration(self) -> None:
         """Produção sem segredo deve manter novos cadastros bloqueados."""

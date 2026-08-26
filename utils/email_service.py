@@ -14,7 +14,10 @@ import ssl
 import unicodedata
 from dataclasses import dataclass
 from email.message import EmailMessage
+from email.utils import formataddr, parseaddr
 from urllib.parse import urlencode
+
+import requests
 
 from utils.database import issue_auth_token
 
@@ -22,6 +25,7 @@ from utils.database import issue_auth_token
 _EMAIL_PATTERN = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
 _CONTROL_CHARACTERS = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 _HTML_MARKUP = re.compile(r"<[^>]{0,512}>")
+_BREVO_EMAIL_ENDPOINT = "https://api.brevo.com/v3/smtp/email"
 
 
 @dataclass(frozen=True)
@@ -38,6 +42,22 @@ def _as_bool(name: str, default: bool = False) -> bool:
     return os.getenv(name, str(default)).lower() in {"1", "true", "yes", "on"}
 
 
+def _sender_identity() -> tuple[str, str]:
+    """Valida e separa o nome e o endereço configurados para o remetente."""
+    raw_sender = os.getenv("EMAIL_FROM", "FinScope <no-reply@finscope.local>").strip()
+    name, address = parseaddr(raw_sender)
+    clean_name = " ".join(unicodedata.normalize("NFKC", name or "FinScope").split())
+    normalized_address = unicodedata.normalize("NFKC", address).strip().lower()
+    if (
+        not 1 <= len(clean_name) <= 80
+        or _CONTROL_CHARACTERS.search(clean_name)
+        or _HTML_MARKUP.search(clean_name)
+        or not _EMAIL_PATTERN.fullmatch(normalized_address)
+    ):
+        raise RuntimeError("EMAIL_FROM possui formato inválido")
+    return clean_name, normalized_address
+
+
 def _send_smtp(recipient: str, subject: str, body: str) -> None:
     """Envia uma mensagem SMTP usando apenas configurações do ambiente."""
     host = os.getenv("SMTP_HOST", "").strip()
@@ -52,9 +72,10 @@ def _send_smtp(recipient: str, subject: str, body: str) -> None:
     port = int(os.getenv("SMTP_PORT", "587"))
     username = os.getenv("SMTP_USERNAME", "").strip()
     password = os.getenv("SMTP_PASSWORD", "")
+    sender_name, sender_email = _sender_identity()
     message = EmailMessage()
     message["Subject"] = subject
-    message["From"] = os.getenv("EMAIL_FROM", "FinScope <no-reply@finscope.local>")
+    message["From"] = formataddr((sender_name, sender_email))
     message["To"] = recipient
     message.set_content(body)
     if _as_bool("SMTP_USE_SSL"):
@@ -69,6 +90,46 @@ def _send_smtp(recipient: str, subject: str, body: str) -> None:
         client.send_message(message)
     finally:
         client.quit()
+
+
+def _send_brevo_api(recipient: str, subject: str, body: str) -> None:
+    """Entrega e-mail transacional pela API HTTPS da Brevo."""
+    api_key = os.getenv("BREVO_API_KEY", "").strip()
+    if not api_key:
+        raise RuntimeError("BREVO_API_KEY não configurada")
+    normalized_recipient = unicodedata.normalize("NFKC", recipient).strip().lower()
+    if not _EMAIL_PATTERN.fullmatch(normalized_recipient):
+        raise RuntimeError("Destinatário de e-mail inválido")
+    sender_name, sender_email = _sender_identity()
+    response = requests.post(
+        _BREVO_EMAIL_ENDPOINT,
+        headers={
+            "accept": "application/json",
+            "api-key": api_key,
+            "content-type": "application/json",
+        },
+        json={
+            "sender": {"name": sender_name, "email": sender_email},
+            "to": [{"email": normalized_recipient}],
+            "subject": subject,
+            "textContent": body,
+        },
+        timeout=15,
+    )
+    if not 200 <= response.status_code < 300:
+        raise RuntimeError("A Brevo recusou a entrega do e-mail")
+
+
+def _send_email(recipient: str, subject: str, body: str) -> None:
+    """Seleciona um provedor de entrega explicitamente configurado."""
+    provider = os.getenv("EMAIL_PROVIDER", "smtp").strip().lower()
+    if provider == "smtp":
+        _send_smtp(recipient, subject, body)
+        return
+    if provider == "brevo":
+        _send_brevo_api(recipient, subject, body)
+        return
+    raise RuntimeError("EMAIL_PROVIDER não suportado")
 
 
 def _send_auth_email(email: str, purpose: str) -> DeliveryResult:
@@ -100,7 +161,7 @@ def _send_auth_email(email: str, purpose: str) -> DeliveryResult:
             "Se você não fez a solicitação, ignore esta mensagem."
         )
     try:
-        _send_smtp(recipient, subject, body)
+        _send_email(recipient, subject, body)
         return DeliveryResult(True, "E-mail enviado. Verifique também a pasta de spam.")
     except Exception:
         if os.getenv("APP_ENV", "development") != "production":
@@ -151,7 +212,7 @@ def send_feedback_email(sender_email: str, sender_name: str, comment: str) -> De
         f"{safe_comment}\n"
     )
     try:
-        _send_smtp(recipient, "Novo comentário do FinScope Beta", body)
+        _send_email(recipient, "Novo comentário do FinScope Beta", body)
         return DeliveryResult(True, "Comentário enviado com sucesso.")
     except Exception:
         return DeliveryResult(
@@ -186,7 +247,7 @@ def send_weekly_summary_email(
         "Mensagem automática da beta fechada do FinScope."
     )
     try:
-        _send_smtp(email, subject, body)
+        _send_email(email, subject, body)
         return DeliveryResult(True, "Resumo semanal enviado.")
     except Exception:
         return DeliveryResult(
