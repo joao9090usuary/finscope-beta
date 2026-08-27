@@ -163,7 +163,6 @@ def _dashboard_styles() -> None:
                 [data-testid="stHorizontalBlock"]:has(.st-key-dashboard_controls),
                 .st-key-dashboard_hero [data-testid="stHorizontalBlock"],
                 .st-key-dashboard_create_card [data-testid="stHorizontalBlock"],
-                .st-key-dashboard_metrics [data-testid="stHorizontalBlock"],
                 .st-key-dashboard_content [data-testid="stHorizontalBlock"] {
                     flex-direction: column !important;
                     align-items: stretch !important;
@@ -173,11 +172,25 @@ def _dashboard_styles() -> None:
                     > [data-testid="stColumn"],
                 .st-key-dashboard_hero [data-testid="stColumn"],
                 .st-key-dashboard_create_card [data-testid="stColumn"],
-                .st-key-dashboard_metrics [data-testid="stColumn"],
                 .st-key-dashboard_content [data-testid="stColumn"] {
                     width: 100% !important;
                     min-width: 0 !important;
                     flex: 1 1 100% !important;
+                }
+            }
+
+            @media (max-width: 760px) {
+                .st-key-dashboard_metrics [data-testid="stHorizontalBlock"] {
+                    display: grid !important;
+                    grid-template-columns: repeat(2, minmax(0, 1fr));
+                    gap: .65rem !important;
+                    align-items: stretch !important;
+                }
+
+                .st-key-dashboard_metrics [data-testid="stColumn"] {
+                    width: 100% !important;
+                    min-width: 0 !important;
+                    flex: none !important;
                 }
             }
 
