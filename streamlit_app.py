@@ -222,9 +222,25 @@ def apply_auth_layout() -> None:
             }
 
             @media (max-width: 760px) {
+                [data-testid="stMainBlockContainer"] {
+                    justify-content: flex-start;
+                    padding:
+                        calc(1.45rem + env(safe-area-inset-top, 0px))
+                        .75rem
+                        .85rem !important;
+                }
+
+                [data-testid="stMainBlockContainer"]
+                > [data-testid="stVerticalBlock"] {
+                    justify-content: flex-start;
+                }
+
                 .st-key-auth_card {
                     width: min(32rem, calc(100% - 0.25rem));
                     min-height: 0;
+                    max-height:
+                        calc(100dvh - 2.3rem - env(safe-area-inset-top, 0px));
+                    margin-block: .2rem;
                 }
 
                 .st-key-auth_card [data-testid="stHorizontalBlock"]
@@ -241,7 +257,14 @@ def apply_auth_layout() -> None:
                 .st-key-auth_form {
                     height: auto;
                     min-height: auto;
+                    max-height:
+                        calc(100dvh - 2.3rem - env(safe-area-inset-top, 0px));
                     padding: 1.25rem;
+                }
+
+                .st-key-auth_form [data-testid="stTextInput"] input,
+                .st-key-auth_panel [data-testid="stTextInput"] input {
+                    font-size: 16px !important;
                 }
             }
 
@@ -492,6 +515,14 @@ def apply_main_layout() -> None:
             @media (max-width: 880px) {
                 [data-testid="stMainBlockContainer"] {
                     padding-inline: 1rem;
+                    padding-top:
+                        calc(4.1rem + env(safe-area-inset-top, 0px)) !important;
+                }
+
+                [data-testid="stMain"] input,
+                [data-testid="stMain"] textarea,
+                [data-testid="stMain"] select {
+                    font-size: 16px !important;
                 }
 
                 [data-testid="stMain"] [data-testid="stMetric"] {
@@ -861,3 +892,4 @@ pages = {
 }
 page = st.navigation(pages, position="top")
 page.run()
+
