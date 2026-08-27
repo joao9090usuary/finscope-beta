@@ -245,7 +245,8 @@ def _home_styles() -> None:
             @media (max-width: 880px) {
                 [data-testid="stMainBlockContainer"] {
                     padding-inline: .85rem;
-                    padding-top: 1rem !important;
+                    padding-top:
+                        calc(4.1rem + env(safe-area-inset-top, 0px)) !important;
                 }
 
                 .st-key-home_hero {
@@ -328,7 +329,8 @@ def _home_styles() -> None:
             @media (max-width: 620px) {
                 [data-testid="stMainBlockContainer"] {
                     padding-inline: .65rem;
-                    padding-top: .7rem !important;
+                    padding-top:
+                        calc(4.1rem + env(safe-area-inset-top, 0px)) !important;
                 }
 
                 .st-key-home_hero {
