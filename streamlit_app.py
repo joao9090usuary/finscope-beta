@@ -30,6 +30,92 @@ st.set_page_config(
     layout="wide",
 )
 
+MOBILE_NAVIGATION_JS = r"""
+export default function(component) {
+    const root = component.parentElement instanceof ShadowRoot
+        ? component.parentElement.host
+        : component.parentElement;
+    const wrapper = root?.closest('[data-testid="stElementContainer"]');
+    if (wrapper) {
+        wrapper.style.display = "none";
+    }
+
+    let tracking = false;
+    let startX = 0;
+    let startY = 0;
+    let startedAt = 0;
+
+    const isMobile = () => window.matchMedia("(max-width: 900px)").matches;
+    const isInteractive = (target) => Boolean(target?.closest(
+        'input, textarea, select, button, a, [contenteditable="true"], '
+        + '[role="slider"], canvas, [data-testid="stDataFrame"]'
+    ));
+
+    const findSidebarButton = () => {
+        const direct = document.querySelector(
+            '[data-testid="stSidebarCollapsedControl"] button, '
+            + 'button[data-testid="stSidebarCollapsedControl"]'
+        );
+        if (direct) return direct;
+
+        return Array.from(document.querySelectorAll("button")).find((button) => {
+            const description = [
+                button.getAttribute("aria-label") || "",
+                button.getAttribute("title") || "",
+                button.textContent || "",
+            ].join(" ").toLowerCase();
+            return description.includes("open sidebar")
+                || description.includes("abrir barra lateral")
+                || description.includes("keyboard_double_arrow_right");
+        });
+    };
+
+    const onTouchStart = (event) => {
+        if (!isMobile() || event.touches.length !== 1 || isInteractive(event.target)) {
+            tracking = false;
+            return;
+        }
+        const touch = event.touches[0];
+        tracking = touch.clientX <= 84;
+        startX = touch.clientX;
+        startY = touch.clientY;
+        startedAt = performance.now();
+    };
+
+    const onTouchEnd = (event) => {
+        if (!tracking || event.changedTouches.length !== 1) return;
+        tracking = false;
+        const touch = event.changedTouches[0];
+        const horizontalDistance = touch.clientX - startX;
+        const verticalDistance = Math.abs(touch.clientY - startY);
+        const duration = performance.now() - startedAt;
+
+        if (horizontalDistance >= 72 && verticalDistance <= 56 && duration <= 800) {
+            findSidebarButton()?.click();
+        }
+    };
+
+    const onTouchCancel = () => {
+        tracking = false;
+    };
+
+    document.addEventListener("touchstart", onTouchStart, { passive: true });
+    document.addEventListener("touchend", onTouchEnd, { passive: true });
+    document.addEventListener("touchcancel", onTouchCancel, { passive: true });
+
+    return () => {
+        document.removeEventListener("touchstart", onTouchStart);
+        document.removeEventListener("touchend", onTouchEnd);
+        document.removeEventListener("touchcancel", onTouchCancel);
+    };
+}
+"""
+
+mobile_navigation_gesture = st.components.v2.component(
+    "finscope_mobile_navigation_gesture",
+    js=MOBILE_NAVIGATION_JS,
+)
+
 st.session_state.setdefault("user", None)
 st.session_state.setdefault("help_messages", [])
 st.session_state.setdefault("help_pending_prompt", None)
@@ -223,24 +309,24 @@ def apply_auth_layout() -> None:
 
             @media (max-width: 760px) {
                 [data-testid="stMainBlockContainer"] {
-                    justify-content: flex-start;
+                    justify-content: center;
                     padding:
-                        calc(1.45rem + env(safe-area-inset-top, 0px))
+                        calc(.85rem + env(safe-area-inset-top, 0px))
                         .75rem
                         .85rem !important;
                 }
 
                 [data-testid="stMainBlockContainer"]
                 > [data-testid="stVerticalBlock"] {
-                    justify-content: flex-start;
+                    justify-content: center;
                 }
 
                 .st-key-auth_card {
                     width: min(32rem, calc(100% - 0.25rem));
                     min-height: 0;
                     max-height:
-                        calc(100dvh - 2.3rem - env(safe-area-inset-top, 0px));
-                    margin-block: .2rem;
+                        calc(100dvh - 1.7rem - env(safe-area-inset-top, 0px));
+                    margin-block: auto;
                 }
 
                 .st-key-auth_card [data-testid="stHorizontalBlock"]
@@ -258,7 +344,7 @@ def apply_auth_layout() -> None:
                     height: auto;
                     min-height: auto;
                     max-height:
-                        calc(100dvh - 2.3rem - env(safe-area-inset-top, 0px));
+                        calc(100dvh - 1.7rem - env(safe-area-inset-top, 0px));
                     padding: 1.25rem;
                 }
 
@@ -536,6 +622,58 @@ def apply_main_layout() -> None:
                 [data-testid="stMain"] [role="tabpanel"],
                 [data-testid="stMain"] [data-testid="stChatMessage"] {
                     padding: 1rem !important;
+                }
+            }
+
+            @media (max-width: 760px) {
+                [data-testid="stMainBlockContainer"]
+                > [data-testid="stVerticalBlock"] {
+                    gap: .8rem;
+                }
+
+                [data-testid="stMain"] h1 {
+                    margin-bottom: .25rem;
+                    font-size: clamp(2rem, 8vw, 2.75rem);
+                    line-height: 1.04;
+                }
+
+                [data-testid="stMain"]
+                [data-testid="stHorizontalBlock"]:has([data-testid="stMetric"]) {
+                    display: grid !important;
+                    grid-template-columns: repeat(2, minmax(0, 1fr));
+                    gap: .65rem !important;
+                    align-items: stretch !important;
+                }
+
+                [data-testid="stMain"]
+                [data-testid="stHorizontalBlock"]:has([data-testid="stMetric"])
+                > [data-testid="stColumn"] {
+                    width: 100% !important;
+                    min-width: 0 !important;
+                    flex: none !important;
+                }
+
+                [data-testid="stMain"] [data-testid="stMetric"] {
+                    height: 7.2rem;
+                    min-height: 7.2rem;
+                    padding: .82rem .9rem .75rem !important;
+                    border-radius: 1rem !important;
+                }
+
+                [data-testid="stMain"] [data-testid="stMetricLabel"] {
+                    min-height: 1.85rem;
+                    margin-bottom: .08rem;
+                    font-size: .74rem;
+                    line-height: 1.25;
+                }
+
+                [data-testid="stMain"] [data-testid="stMetricValue"] {
+                    font-size: clamp(1.22rem, 5.2vw, 1.7rem);
+                    line-height: 1.08;
+                }
+
+                [data-testid="stMain"] [data-testid="stMetricDelta"] {
+                    font-size: .69rem;
                 }
             }
 
@@ -842,6 +980,7 @@ if not user:
     st.rerun()
 st.session_state.user = user
 apply_main_layout()
+mobile_navigation_gesture(key="mobile_navigation_gesture")
 with st.sidebar:
     st.markdown("### :material/account_balance_wallet: FinScope")
     safe_user_name = escape(str(user["name"]))
