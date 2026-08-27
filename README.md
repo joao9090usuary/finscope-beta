@@ -7,9 +7,27 @@ portfólio virtual.
 > **Status:** beta fechada para até 10 participantes. A Central de Ajuda utiliza
 > respostas locais e não realiza chamadas a serviços de inteligência artificial.
 
+## Código-fonte público e dados privados
+
+O código-fonte pode ser consultado publicamente, mas a beta hospedada continua
+limitada às contas autorizadas pela aplicação. Tornar o repositório público não
+expõe o banco Neon, o serviço Render, a conta Brevo nem os dados das pessoas
+usuárias: essas credenciais permanecem somente nas variáveis de ambiente dos
+respectivos serviços.
+
+- O arquivo `.env` nunca deve ser versionado; use apenas `.env.example` como
+  referência.
+- Não publique tokens, senhas, URLs de banco com credenciais, exportações de
+  contas ou relatórios financeiros reais.
+- Antes de enviar uma contribuição, confira `git diff --staged` e execute os
+  testes do projeto.
+- Falhas de segurança devem seguir as orientações de [SECURITY.md](SECURITY.md),
+  sem exposição em uma issue pública.
+
 ## Sumário
 
 - [Funcionalidades](#funcionalidades)
+- [Código-fonte público e dados privados](#código-fonte-público-e-dados-privados)
 - [Tecnologias](#tecnologias)
 - [Execução com Docker](#execução-com-docker)
 - [Execução local](#execução-local)

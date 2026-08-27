@@ -3,11 +3,14 @@
 Este projeto inclui um `render.yaml` para criar o aplicativo gratuito no Render,
 conectado a um PostgreSQL gratuito no Neon e à API HTTPS da Brevo. Nenhuma chave
 é gravada no Git. A publicação exige contas do proprietário nos três serviços e
-um repositório Git privado.
+um repositório GitHub conectado ao Render. O repositório pode ser público desde
+que contenha somente os placeholders de `.env.example` e nenhuma credencial no
+histórico.
 
 ## 1. Antes da publicação
 
-1. Envie esta pasta para um repositório **privado** no GitHub.
+1. Envie esta pasta ao GitHub. Se o repositório for público, audite também todo
+   o histórico de commits antes de alterar a visibilidade.
 2. Confirme que `.env` não foi enviado; apenas `.env.example` deve existir no Git.
 3. Crie o banco no Neon e copie a URL de conexão agrupada (`pooled`) com SSL.
 4. No Render, selecione **New > Blueprint** e conecte o repositório.

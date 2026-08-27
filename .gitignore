@@ -3,6 +3,14 @@
 .env.*
 !.env.example
 .streamlit/secrets.toml
+*.pem
+*.key
+*.p12
+*.pfx
+.npmrc
+.pypirc
+credentials*.json
+service-account*.json
 
 # Ambientes e caches Python
 .venv/
