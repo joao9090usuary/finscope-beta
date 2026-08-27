@@ -155,7 +155,8 @@ def _dashboard_styles() -> None:
             @media (max-width: 900px) {
                 [data-testid="stMainBlockContainer"] {
                     padding-inline: 1rem;
-                    padding-top: 1.75rem !important;
+                    padding-top:
+                        calc(4.1rem + env(safe-area-inset-top, 0px)) !important;
                 }
                 .st-key-dashboard_controls { position: static; }
 
@@ -599,3 +600,4 @@ if dashboard_config:
     _dashboard_screen(current_user, dashboard_config)
 else:
     _creation_screen(current_user)
+
