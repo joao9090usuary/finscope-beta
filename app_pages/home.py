@@ -244,29 +244,136 @@ def _home_styles() -> None:
 
             @media (max-width: 880px) {
                 [data-testid="stMainBlockContainer"] {
-                    padding-inline: 1rem;
-                    padding-top: 1.75rem !important;
+                    padding-inline: .85rem;
+                    padding-top: 1rem !important;
+                }
+
+                .st-key-home_hero {
+                    min-height: auto;
+                    margin-bottom: .75rem;
+                    padding: 1.15rem 1.25rem;
+                    border-radius: 1.3rem;
+                }
+
+                .st-key-home_hero::after {
+                    width: 13rem;
+                    height: 13rem;
+                    right: -4.5rem;
+                    top: -5.5rem;
+                }
+
+                .home-kicker {
+                    margin-bottom: .5rem;
+                    padding: .27rem .58rem;
+                    font-size: .68rem;
+                }
+
+                .home-greeting {
+                    font-size: clamp(2.15rem, 7.4vw, 3.35rem);
+                    line-height: 1;
+                }
+
+                .home-subtitle {
+                    margin-top: .6rem;
+                    font-size: .92rem;
+                    line-height: 1.5;
+                }
+
+                .st-key-home_metrics {
+                    margin-bottom: .75rem;
                 }
 
                 .st-key-home_metrics [data-testid="stHorizontalBlock"] {
-                    flex-direction: column !important;
+                    display: grid !important;
+                    grid-template-columns: repeat(4, minmax(0, 1fr));
+                    gap: .7rem !important;
                     align-items: stretch !important;
                 }
 
                 .st-key-home_metrics [data-testid="stColumn"] {
                     width: 100% !important;
                     min-width: 0 !important;
-                    flex: 1 1 100% !important;
+                    flex: none !important;
                 }
 
                 .st-key-home_metrics [data-testid="stMetric"] {
-                    height: 8.7rem;
-                    min-height: 8.7rem;
+                    height: 7.65rem;
+                    min-height: 7.65rem;
+                    padding: .9rem .95rem .8rem !important;
+                    border-radius: 1rem;
+                }
+
+                .st-key-home_metrics [data-testid="stMetricLabel"] {
+                    min-height: 2.15rem;
+                    margin-bottom: .1rem;
+                    font-size: .73rem;
+                    line-height: 1.25;
+                }
+
+                .st-key-home_metrics [data-testid="stMetricValue"] {
+                    font-size: clamp(1.45rem, 4vw, 2rem);
+                    line-height: 1.1;
+                }
+
+                .st-key-home_metrics [data-testid="stMetricDelta"] {
+                    font-size: .7rem;
                 }
 
                 .st-key-home_recent,
                 .st-key-home_month {
                     min-height: auto;
+                }
+            }
+
+            @media (max-width: 620px) {
+                [data-testid="stMainBlockContainer"] {
+                    padding-inline: .65rem;
+                    padding-top: .7rem !important;
+                }
+
+                .st-key-home_hero {
+                    padding: 1rem 1.05rem;
+                    border-radius: 1.15rem;
+                }
+
+                .home-greeting {
+                    font-size: clamp(2rem, 10.5vw, 2.75rem);
+                }
+
+                .home-subtitle {
+                    font-size: .86rem;
+                    line-height: 1.45;
+                }
+
+                .st-key-home_metrics [data-testid="stHorizontalBlock"] {
+                    grid-template-columns: repeat(2, minmax(0, 1fr));
+                    gap: .6rem !important;
+                }
+
+                .st-key-home_metrics [data-testid="stMetric"] {
+                    height: 6.95rem;
+                    min-height: 6.95rem;
+                    padding: .78rem .82rem .7rem !important;
+                }
+
+                .st-key-home_metrics [data-testid="stMetricLabel"] {
+                    min-height: 1.9rem;
+                    font-size: .69rem;
+                }
+
+                .st-key-home_metrics [data-testid="stMetricValue"] {
+                    font-size: clamp(1.35rem, 7vw, 1.8rem);
+                }
+
+                .st-key-home_metrics [data-testid="stMetricChart"] {
+                    display: none;
+                }
+
+                .st-key-home_quickstart,
+                .st-key-home_recent,
+                .st-key-home_month {
+                    padding: 1rem !important;
+                    border-radius: 1.05rem !important;
                 }
             }
 
@@ -414,3 +521,4 @@ with st.container(key="home_help"):
         "locais e não envia dados a serviços de inteligência artificial.",
         icon=":material/help_center:",
     )
+
