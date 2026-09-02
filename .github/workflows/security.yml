@@ -1,0 +1,41 @@
+name: Security checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "17 9 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+      - name: Install application and audit tools
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt pip-audit bandit
+      - name: Validate installed dependencies
+        run: python -m pip check
+      - name: Run automated tests
+        run: python -m unittest discover -s tests -v
+      - name: Audit Python dependencies
+        run: python -m pip_audit -r requirements.txt --progress-spinner off
+      - name: Scan Python source
+        run: bandit -q -r app_pages jobs utils streamlit_app.py -ll

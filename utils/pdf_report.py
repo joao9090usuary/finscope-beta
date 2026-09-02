@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 from datetime import date, datetime
+from html import escape
 from io import BytesIO
-from xml.sax.saxutils import escape
 
 import pandas as pd
 from reportlab.graphics.charts.doughnut import Doughnut
@@ -50,7 +50,7 @@ CHART_COLORS = [
 
 def _safe(value: object) -> str:
     """Escapa textos inseridos em componentes XML do ReportLab."""
-    return escape(str(value or ""))
+    return escape(str(value or ""), quote=False)
 
 
 def _styles() -> dict[str, ParagraphStyle]:

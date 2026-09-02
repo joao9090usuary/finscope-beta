@@ -12,7 +12,9 @@ from pathlib import Path
 
 import bcrypt
 import pandas as pd
+from psycopg import sql as pg_sql
 from sqlalchemy import (
+    DDL,
     Boolean,
     Date,
     DateTime,
@@ -22,12 +24,13 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    column,
     create_engine,
     delete,
     func,
     inspect,
     select,
-    text,
+    table,
     update,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column
@@ -261,6 +264,35 @@ _PLAIN_TEXT_MARKUP = re.compile(r"<[^>]{0,512}>")
 _CONTROL_CHARACTERS = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 _ROLE_NAME = re.compile(r"^[a-z_][a-z0-9_]{0,62}$")
 
+_PG_ROLES = table(
+    "pg_roles",
+    column("rolname", String),
+    column("oid", Integer),
+    column("rolsuper", Boolean),
+    column("rolbypassrls", Boolean),
+    column("rolcreatedb", Boolean),
+    column("rolcreaterole", Boolean),
+    schema="pg_catalog",
+)
+_PG_CLASS = table(
+    "pg_class",
+    column("relname", String),
+    column("relrowsecurity", Boolean),
+    column("relforcerowsecurity", Boolean),
+    column("relnamespace", Integer),
+    schema="pg_catalog",
+)
+_PG_NAMESPACE = table(
+    "pg_namespace",
+    column("oid", Integer),
+    column("nspname", String),
+    schema="pg_catalog",
+)
+
+
+class DatabaseSecurityError(RuntimeError):
+    """Impede a inicialização com um papel capaz de contornar o isolamento."""
+
 
 def _clean_plain_text(
     value: str,
@@ -303,44 +335,109 @@ def _set_rls_context(session: Session, user_id: int) -> None:
         raise PermissionError("Contexto de conta inválido.")
     if session.bind is not None and session.bind.dialect.name == "postgresql":
         session.execute(
-            text(
-                "SELECT set_config('finscope.user_id', :user_id, true)"
-            ),
-            {"user_id": str(safe_user_id)},
+            select(func.set_config("finscope.user_id", str(safe_user_id), True))
         )
 
 
 def _configure_postgres_security(connection) -> None:
     """Ativa RLS forçada e concede ao papel de execução apenas o necessário."""
+    runtime_role = os.getenv("APP_DATABASE_ROLE", "").strip()
+    if runtime_role and not _ROLE_NAME.fullmatch(runtime_role):
+        raise RuntimeError("APP_DATABASE_ROLE possui formato inválido.")
+
     predicate = (
         "(user_id = NULLIF(current_setting('finscope.user_id', true), '')::INTEGER)"
     )
     for table_name in _TENANT_TABLES:
-        connection.execute(text(f'ALTER TABLE "{table_name}" ENABLE ROW LEVEL SECURITY'))
-        connection.execute(text(f'ALTER TABLE "{table_name}" FORCE ROW LEVEL SECURITY'))
-        connection.execute(text(f'DROP POLICY IF EXISTS tenant_isolation ON "{table_name}"'))
+        table = Base.metadata.tables[table_name]
         connection.execute(
-            text(
-                f'CREATE POLICY tenant_isolation ON "{table_name}" '
-                f'USING {predicate} WITH CHECK {predicate}'
-            )
+            DDL("ALTER TABLE %(table)s ENABLE ROW LEVEL SECURITY").against(table)
+        )
+        connection.execute(
+            DDL("ALTER TABLE %(table)s FORCE ROW LEVEL SECURITY").against(table)
+        )
+        connection.execute(
+            DDL("DROP POLICY IF EXISTS tenant_isolation ON %(table)s").against(table)
+        )
+        connection.execute(
+            DDL(
+                "CREATE POLICY tenant_isolation ON %(table)s "
+                f"USING {predicate} WITH CHECK {predicate}"
+            ).against(table)
         )
 
-    runtime_role = os.getenv("APP_DATABASE_ROLE", "").strip()
     if runtime_role:
-        if not _ROLE_NAME.fullmatch(runtime_role):
-            raise RuntimeError("APP_DATABASE_ROLE possui formato inválido.")
-        connection.execute(
-            text(
-                f'GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public '
-                f'TO "{runtime_role}"'
+        # Identificadores não podem ser parâmetros SQL. O compositor do psycopg
+        # aplica a citação correta após a validação estrita do nome do papel.
+        role = pg_sql.Identifier(runtime_role)
+        dbapi_connection = connection.connection.driver_connection
+        with dbapi_connection.cursor() as cursor:
+            cursor.execute(
+                pg_sql.SQL(
+                    "GRANT SELECT, INSERT, UPDATE, DELETE "
+                    "ON ALL TABLES IN SCHEMA public TO {}"
+                ).format(role)
             )
+            cursor.execute(
+                pg_sql.SQL(
+                    "GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO {}"
+                ).format(role)
+            )
+
+
+def _assert_runtime_postgres_security(connection) -> None:
+    """Falha de modo seguro se o papel ou as tabelas puderem ignorar o RLS."""
+    role = connection.execute(
+        select(
+            _PG_ROLES.c.rolname,
+            _PG_ROLES.c.rolsuper,
+            _PG_ROLES.c.rolbypassrls,
+            _PG_ROLES.c.rolcreatedb,
+            _PG_ROLES.c.rolcreaterole,
+        ).where(_PG_ROLES.c.rolname == func.current_user())
+    ).mappings().one_or_none()
+    if (
+        not role
+        or role["rolsuper"]
+        or role["rolbypassrls"]
+        or role["rolcreatedb"]
+        or role["rolcreaterole"]
+    ):
+        raise DatabaseSecurityError(
+            "O papel PostgreSQL da aplicação possui privilégios administrativos."
         )
-        connection.execute(
-            text(
-                f'GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public '
-                f'TO "{runtime_role}"'
-            )
+
+    privileged_membership = connection.execute(
+        select(_PG_ROLES.c.rolname).where(
+            (_PG_ROLES.c.rolsuper.is_(True) | _PG_ROLES.c.rolbypassrls.is_(True)),
+            func.pg_has_role(func.current_user(), _PG_ROLES.c.oid, "MEMBER"),
+        )
+    ).mappings().first()
+    if privileged_membership:
+        raise DatabaseSecurityError(
+            "O papel PostgreSQL da aplicação pertence a um papel que ignora RLS."
+        )
+
+    rows = connection.execute(
+        select(
+            _PG_CLASS.c.relname,
+            _PG_CLASS.c.relrowsecurity,
+            _PG_CLASS.c.relforcerowsecurity,
+        )
+        .join(_PG_NAMESPACE, _PG_NAMESPACE.c.oid == _PG_CLASS.c.relnamespace)
+        .where(
+            _PG_NAMESPACE.c.nspname == "public",
+            _PG_CLASS.c.relname.in_(_TENANT_TABLES),
+        )
+    ).mappings().all()
+    protected = {
+        row["relname"]
+        for row in rows
+        if row["relrowsecurity"] and row["relforcerowsecurity"]
+    }
+    if set(_TENANT_TABLES) - protected:
+        raise DatabaseSecurityError(
+            "As políticas de isolamento PostgreSQL não estão completas."
         )
 
 
@@ -413,7 +510,9 @@ def init_db() -> None:
     }
     if not migrations_enabled:
         with engine.connect() as connection:
-            connection.execute(text("SELECT 1"))
+            connection.execute(select(1))
+            if engine.dialect.name == "postgresql":
+                _assert_runtime_postgres_security(connection)
         return
 
     Base.metadata.create_all(engine)
@@ -425,52 +524,55 @@ def init_db() -> None:
     with engine.begin() as connection:
         if "email_verified" not in columns:
             connection.execute(
-                text(
-                    "ALTER TABLE users ADD COLUMN email_verified "
+                DDL(
+                    "ALTER TABLE %(table)s ADD COLUMN email_verified "
                     "BOOLEAN NOT NULL DEFAULT TRUE"
-                )
+                ).against(User.__table__)
             )
         if "verified_at" not in columns:
             connection.execute(
-                text("ALTER TABLE users ADD COLUMN verified_at TIMESTAMP NULL")
+                DDL(
+                    "ALTER TABLE %(table)s ADD COLUMN verified_at TIMESTAMP NULL"
+                ).against(User.__table__)
             )
         # A Beta 5.1 não bloqueia contas pela verificação de e-mail.
-        connection.execute(text("UPDATE users SET email_verified = TRUE"))
+        connection.execute(update(User).values(email_verified=True))
         if "user_id" not in occurrence_columns:
-            connection.execute(text("ALTER TABLE recurring_occurrences ADD COLUMN user_id INTEGER"))
+            occurrence_table = RecurringOccurrence.__table__
+            connection.execute(
+                DDL(
+                    "ALTER TABLE %(table)s ADD COLUMN user_id INTEGER"
+                ).against(occurrence_table)
+            )
+            owner_id = (
+                select(RecurringEntry.user_id)
+                .where(RecurringEntry.id == RecurringOccurrence.recurring_entry_id)
+                .scalar_subquery()
+            )
+            connection.execute(
+                update(RecurringOccurrence)
+                .where(RecurringOccurrence.user_id.is_(None))
+                .values(user_id=owner_id)
+            )
             if engine.dialect.name == "postgresql":
                 connection.execute(
-                    text(
-                        "UPDATE recurring_occurrences AS occurrence "
-                        "SET user_id = entry.user_id "
-                        "FROM recurring_entries AS entry "
-                        "WHERE entry.id = occurrence.recurring_entry_id"
-                    )
+                    DDL(
+                        "ALTER TABLE %(table)s ALTER COLUMN user_id SET NOT NULL"
+                    ).against(occurrence_table)
                 )
                 connection.execute(
-                    text("ALTER TABLE recurring_occurrences ALTER COLUMN user_id SET NOT NULL")
-                )
-                connection.execute(
-                    text(
-                        "ALTER TABLE recurring_occurrences "
+                    DDL(
+                        "ALTER TABLE %(table)s "
                         "ADD CONSTRAINT fk_recurring_occurrences_user_id "
                         "FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE"
-                    )
+                    ).against(occurrence_table)
                 )
-            else:
-                connection.execute(
-                    text(
-                        "UPDATE recurring_occurrences SET user_id = ("
-                        "SELECT recurring_entries.user_id FROM recurring_entries "
-                        "WHERE recurring_entries.id = recurring_occurrences.recurring_entry_id)"
-                    )
-                )
-            connection.execute(
-                text(
-                    "CREATE INDEX IF NOT EXISTS ix_recurring_occurrences_user_id "
-                    "ON recurring_occurrences (user_id)"
-                )
+            user_id_index = next(
+                index
+                for index in occurrence_table.indexes
+                if index.name == "ix_recurring_occurrences_user_id"
             )
+            user_id_index.create(bind=connection, checkfirst=True)
         if engine.dialect.name == "postgresql":
             _configure_postgres_security(connection)
 
@@ -500,7 +602,7 @@ def create_user(
         if engine.dialect.name == "postgresql":
             # Serializa somente o cadastro para que duas solicitações simultâneas
             # não ultrapassem o limite de participantes da beta.
-            session.execute(text("SELECT pg_advisory_xact_lock(51002026)"))
+            session.execute(select(func.pg_advisory_xact_lock(51002026)))
         if session.scalar(select(User).where(User.email == normalized)):
             return False, "Já existe uma conta com este e-mail."
         allowed = {
@@ -558,7 +660,9 @@ def authenticate(email: str, password: str) -> dict | None:
             throttle.failed_attempts = 0
             throttle.locked_until = None
 
-        user = session.scalar(select(User).where(User.email == normalized))
+        user = session.scalar(
+            select(User).where(User.email == normalized).with_for_update()
+        )
         password_hash = user.password_hash if user else _DUMMY_PASSWORD_HASH
         valid = bcrypt.checkpw(password.encode(), password_hash.encode())
         if not user or not valid:
@@ -607,7 +711,9 @@ def issue_auth_token(email: str, purpose: str, ttl_minutes: int) -> tuple[str, s
         return None
     now = utcnow()
     with Session(engine) as session:
-        user = session.scalar(select(User).where(User.email == normalized))
+        user = session.scalar(
+            select(User).where(User.email == normalized).with_for_update()
+        )
         if not user:
             return None
         recent = session.scalar(
@@ -649,7 +755,7 @@ def verify_email_token(raw_token: str) -> tuple[bool, str]:
             select(AuthToken).where(
                 AuthToken.token_hash == digest,
                 AuthToken.purpose == "verify",
-            )
+            ).with_for_update()
         )
         if not token or token.used_at or token.expires_at < now:
             return False, "Este link de verificação é inválido ou expirou. Solicite um novo link."
@@ -676,7 +782,7 @@ def reset_password_token(raw_token: str, new_password: str) -> tuple[bool, str]:
             select(AuthToken).where(
                 AuthToken.token_hash == digest,
                 AuthToken.purpose == "reset",
-            )
+            ).with_for_update()
         )
         if not token or token.used_at or token.expires_at < now:
             return False, "Este link de recuperação é inválido ou expirou. Solicite um novo link."

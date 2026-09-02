@@ -14,7 +14,7 @@ services:
       - key: APP_ENV
         value: production
       - key: DATABASE_MIGRATIONS_ENABLED
-        value: "true"
+        value: "false"
       - key: APP_BASE_URL
         sync: false
       - key: BETA_MAX_USERS

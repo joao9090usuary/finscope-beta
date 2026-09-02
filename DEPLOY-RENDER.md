@@ -12,14 +12,16 @@ histórico.
 1. Envie esta pasta ao GitHub. Se o repositório for público, audite também todo
    o histórico de commits antes de alterar a visibilidade.
 2. Confirme que `.env` não foi enviado; apenas `.env.example` deve existir no Git.
-3. Crie o banco no Neon e copie a URL de conexão agrupada (`pooled`) com SSL.
+3. Crie no Neon duas credenciais: a proprietária, usada somente para migrações,
+   e `finscope_app`, sem `SUPERUSER`, propriedade de tabelas ou `BYPASSRLS`.
 4. No Render, selecione **New > Blueprint** e conecte o repositório.
 5. Use `render.yaml` na raiz e revise os recursos antes de confirmar.
 
 O Blueprint solicita os segredos abaixo:
 
 - `APP_BASE_URL`: URL HTTPS exibida pelo Render, sem barra final;
-- `DATABASE_URL`: URL agrupada e protegida por SSL fornecida pelo Neon;
+- `DATABASE_URL`: URL agrupada com SSL do papel restrito `finscope_app`; nunca
+  use aqui a URL de `neondb_owner` ou de outro proprietário;
 - `BETA_INVITE_CODE`: código longo compartilhado somente com os dez convidados;
 - `BRAPI_TOKEN`: token da brapi;
 - `BREVO_API_KEY`: chave transacional privada criada na Brevo;
@@ -30,6 +32,25 @@ O Blueprint solicita os segredos abaixo:
 O limite de dez contas é controlado no banco por `BETA_MAX_USERS=10`. A lista
 `BETA_ALLOWED_EMAILS` permanece vazia, então cada participante escolhe livremente
 seu próprio e-mail e sua própria senha, desde que possua o código de convite.
+
+### Preparação segura do Neon
+
+Antes do primeiro deploy ou de uma migração de esquema, execute o comando abaixo
+em um terminal confiável. Use a URL **direta** do proprietário apenas nessa
+execução; não a grave em `.env`, no GitHub ou nas variáveis do serviço web.
+
+```powershell
+$env:MIGRATION_DATABASE_URL = "<URL direta do proprietário no Neon>"
+$env:APP_DATABASE_ROLE = "finscope_app"
+$env:POSTGRES_APP_PASSWORD = "<senha aleatória exclusiva com 32+ caracteres>"
+python -m jobs.provision_postgres
+```
+
+Depois, monte no Neon a URL agrupada do mesmo papel `finscope_app` e salve-a
+como `DATABASE_URL` no Render. O `render.yaml` mantém migrações desativadas no
+processo web. Na inicialização, o FinScope bloqueia o uso de papéis com
+`BYPASSRLS`/`SUPERUSER` e também bloqueia se alguma tabela particular estiver
+sem RLS forçada. Apague as três variáveis administrativas do terminal ao terminar.
 
 ## 2. Verificações depois do primeiro deploy
 

@@ -27,6 +27,18 @@ O formato segue as categorias do Keep a Changelog.
 
 ### Corrigido
 
+- Remoção dos oito padrões apontados pela varredura SAST de 02/09/2026.
+- Comandos administrativos do PostgreSQL deixaram de usar `sqlalchemy.text`;
+  tabelas são resolvidas pelo metadado e papéis são citados com `psycopg.sql.Identifier`.
+- Remoção do ponto de entrada legado que executava código dinamicamente com `exec`.
+- Escape do relatório PDF migrado para `html.escape`, sem importação do parser XML padrão.
+- Testes de regressão impedem a reintrodução dos padrões e validam a compilação da RLS.
+- O serviço web não executa migrações e recusa papéis PostgreSQL com
+  `SUPERUSER`/`BYPASSRLS` ou tabelas particulares sem RLS forçada.
+- Provisionamento administrativo do Neon foi separado do processo web, sem
+  imprimir ou persistir credenciais.
+- GitHub Actions passou a executar testes, Bandit e auditoria de dependências;
+  o Dependabot acompanha pacotes Python e as próprias Actions semanalmente.
 - Isolamento no PostgreSQL com papel restrito, RLS forçada e contexto por transação.
 - Exclusão de recorrências agora verifica o proprietário antes de tocar em dependências.
 - Entradas textuais, exportação CSV e execução de HTML receberam proteções adicionais.
