@@ -11,6 +11,7 @@ import streamlit as st
 from sqlalchemy.exc import OperationalError
 
 from utils.database import (
+    DatabaseSecurityError,
     authenticate,
     authenticated_user,
     create_user,
@@ -712,7 +713,7 @@ def initialize_database_or_stop() -> None:
     """Inicializa o banco ou apresenta uma falha segura de infraestrutura."""
     try:
         init_db()
-    except OperationalError:
+    except (OperationalError, DatabaseSecurityError):
         apply_auth_layout()
         with st.container(key="auth_panel", horizontal_alignment="center"):
             st.title(
@@ -720,13 +721,12 @@ def initialize_database_or_stop() -> None:
                 text_alignment="center",
             )
             st.error(
-                "O FinScope não conseguiu se conectar ao PostgreSQL.",
+                "O FinScope não conseguiu validar a conexão segura com o PostgreSQL.",
                 icon=":material/database_off:",
             )
             st.write(
-                "Reinicie os serviços pelo Docker. A configuração atual "
-                "prepara o papel restrito e aplica as políticas RLS antes de "
-                "iniciar o aplicativo."
+                "A aplicação foi interrompida para não acessar dados com uma "
+                "credencial administrativa ou sem isolamento RLS completo."
             )
             st.code("docker compose up --build -d", language="powershell")
             st.caption(
@@ -1031,4 +1031,3 @@ pages = {
 }
 page = st.navigation(pages, position="top")
 page.run()
-

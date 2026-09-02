@@ -1,5 +1,6 @@
 """Testes de configuração e apresentação específicas da Beta 5.1."""
 
+import re
 import unittest
 from pathlib import Path
 
@@ -50,7 +51,7 @@ class BetaConfigurationTest(unittest.TestCase):
         self.assertIn("ALTER ROLE finscope", compose)
         self.assertIn("NOBYPASSRLS", compose)
         self.assertIn("postgresql+psycopg://finscope_app:", compose)
-        self.assertIn("except OperationalError:", entrypoint)
+        self.assertIn("except (OperationalError, DatabaseSecurityError):", entrypoint)
         self.assertNotIn("st.exception", entrypoint)
 
     def test_postgres_row_security_is_forced(self) -> None:
@@ -62,6 +63,26 @@ class BetaConfigurationTest(unittest.TestCase):
         self.assertIn("ENABLE ROW LEVEL SECURITY", database_source)
         self.assertIn("FORCE ROW LEVEL SECURITY", database_source)
         self.assertIn("current_setting('finscope.user_id'", database_source)
+
+    def test_sast_findings_do_not_return(self) -> None:
+        """Impede a reintrodução dos padrões sinalizados pela varredura externa."""
+        database_source = (PROJECT_ROOT / "utils" / "database.py").read_text(
+            encoding="utf-8"
+        )
+        pdf_source = (PROJECT_ROOT / "utils" / "pdf_report.py").read_text(
+            encoding="utf-8"
+        )
+        python_sources = "\n".join(
+            path.read_text(encoding="utf-8")
+            for path in PROJECT_ROOT.rglob("*.py")
+            if ".venv" not in path.parts and "__pycache__" not in path.parts
+        )
+
+        self.assertIsNone(re.search(r"\btext\s*\(", database_source))
+        self.assertNotIn("xml.sax", pdf_source)
+        self.assertIsNone(re.search(r"\bexec\s*\(", python_sources))
+        self.assertFalse((PROJECT_ROOT / "app.py").exists())
+        self.assertIn("pg_sql.Identifier(runtime_role)", database_source)
 
     def test_browser_security_does_not_enable_arbitrary_javascript(self) -> None:
         """O ponto de entrada não deve liberar execução de JavaScript injetado."""
