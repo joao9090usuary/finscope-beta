@@ -101,6 +101,26 @@ class BetaConfigurationTest(unittest.TestCase):
         self.assertIn("Esqueceu sua senha?", entrypoint)
         self.assertNotIn("with st.skeleton", investments)
 
+    def test_production_proxy_adds_security_headers(self) -> None:
+        """A borda HTTP deve proteger as respostas sem quebrar WebSockets."""
+        caddy = (PROJECT_ROOT / "Caddyfile").read_text(encoding="utf-8")
+        dockerfile = (PROJECT_ROOT / "Dockerfile").read_text(encoding="utf-8")
+        render = (PROJECT_ROOT / "render.yaml").read_text(encoding="utf-8")
+        supervisor = (PROJECT_ROOT / "jobs" / "start_web.py").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("Strict-Transport-Security", caddy)
+        self.assertIn("Content-Security-Policy", caddy)
+        self.assertIn("X-Content-Type-Options", caddy)
+        self.assertIn("X-Frame-Options", caddy)
+        self.assertIn("reverse_proxy 127.0.0.1:8502", caddy)
+        self.assertIn("caddy:2.11.4-alpine", dockerfile)
+        self.assertIn("install -m 0755 /tmp/caddy /usr/local/bin/caddy", dockerfile)
+        self.assertIn('CMD ["python", "-m", "jobs.start_web"]', dockerfile)
+        self.assertIn("dockerCommand: python -m jobs.start_web", render)
+        self.assertIn("subprocess.Popen", supervisor)
+
     def test_home_glass_styles_escape_the_user_name(self) -> None:
         """O acabamento compartilhado deve preservar acessibilidade e dados pessoais."""
         home = (PROJECT_ROOT / "app_pages" / "home.py").read_text(encoding="utf-8")

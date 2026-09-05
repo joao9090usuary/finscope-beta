@@ -7,7 +7,7 @@ services:
     plan: free
     dockerfilePath: ./Dockerfile
     dockerContext: .
-    dockerCommand: streamlit run streamlit_app.py --server.address=0.0.0.0 --server.port=$PORT
+    dockerCommand: python -m jobs.start_web
     healthCheckPath: /_stcore/health
     autoDeployTrigger: commit
     envVars:
