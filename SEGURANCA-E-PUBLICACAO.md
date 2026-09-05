@@ -1,4 +1,4 @@
-# Segurança e publicação do FinScope
+# Segurança e publicação do Revo
 
 ## Fase 1 — beta fechada para 10 pessoas
 
@@ -26,7 +26,7 @@
 ### Se o volume PostgreSQL já existe com a senha local
 
 Não apague o volume. A composição atual sincroniza automaticamente a senha
-gravada no PostgreSQL, cria o papel restrito `finscope_app` e aplica RLS antes
+gravada no PostgreSQL, cria o papel restrito `revo_app` e aplica RLS antes
 de iniciar o aplicativo:
 
 ```powershell
@@ -39,17 +39,17 @@ PostgreSQL, não possui acesso à rede e termina antes de o Streamlit iniciar. O
 dados persistidos no volume são preservados.
 
 As tabelas particulares usam `ENABLE ROW LEVEL SECURITY` e `FORCE ROW LEVEL
-SECURITY`. Cada transação recebe `finscope.user_id` no servidor; sem esse contexto,
+SECURITY`. Cada transação recebe `revo.user_id` no servidor; sem esse contexto,
 o PostgreSQL nega a leitura e a alteração das linhas.
 
 Se a sincronização automática não terminar com o código `0`, use o procedimento
 interativo de contingência:
 
 ```powershell
-docker compose exec database psql -U finscope -d finscope
+docker compose exec database psql -U revo -d revo
 ```
 
-No prompt do PostgreSQL, execute `\password finscope`, informe a mesma senha do
+No prompt do PostgreSQL, execute `\password revo`, informe a mesma senha do
 `.env`, saia com `\q` e execute novamente `docker compose up -d`.
 
 ## Critérios para abrir ao público

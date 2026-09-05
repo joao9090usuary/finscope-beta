@@ -1,4 +1,4 @@
-name: finscope-completo-v3
+name: revo-completo-v3
 
 services:
   database:
@@ -11,8 +11,8 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Defina POSTGRES_PASSWORD no arquivo .env}
       POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256
     volumes:
-      - finscope_data:/var/lib/postgresql/data
-      - finscope_socket:/var/run/postgresql
+      - revo_data:/var/lib/postgresql/data
+      - revo_socket:/var/run/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U finscope"]
       interval: 5s
@@ -53,7 +53,7 @@ services:
         REVOKE CREATE ON SCHEMA public FROM PUBLIC;
         SQL
     volumes:
-      - finscope_socket:/var/run/postgresql
+      - revo_socket:/var/run/postgresql
     depends_on:
       database:
         condition: service_healthy
@@ -124,7 +124,7 @@ services:
       LOGIN_LOCK_MINUTES: ${LOGIN_LOCK_MINUTES:-15}
       BRAPI_BASE_URL: ${BRAPI_BASE_URL:-https://brapi.dev/api}
       BRAPI_TOKEN: ${BRAPI_TOKEN:-}
-      YFINANCE_CACHE_DIR: /tmp/finscope-yfinance
+      YFINANCE_CACHE_DIR: /tmp/revo-yfinance
       STREAMLIT_BROWSER_GATHER_USAGE_STATS: "false"
       STREAMLIT_SERVER_COOKIE_SECRET: ${STREAMLIT_SERVER_COOKIE_SECRET:?Defina STREAMLIT_SERVER_COOKIE_SECRET no arquivo .env}
       EMAIL_PROVIDER: ${EMAIL_PROVIDER:-smtp}
@@ -135,7 +135,7 @@ services:
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
       SMTP_USE_TLS: ${SMTP_USE_TLS:-false}
       SMTP_USE_SSL: ${SMTP_USE_SSL:-false}
-      EMAIL_FROM: ${EMAIL_FROM:-FinScope <no-reply@finscope.local>}
+      EMAIL_FROM: ${EMAIL_FROM:-Revo <no-reply@revo.local>}
       FEEDBACK_TO_EMAIL: ${FEEDBACK_TO_EMAIL:?Defina FEEDBACK_TO_EMAIL no arquivo .env}
     depends_on:
       database:
@@ -149,8 +149,11 @@ services:
       - backend
 
 volumes:
-  finscope_data:
-  finscope_socket:
+  revo_data:
+    # Reutiliza os dados criados pela versao 5.1.4.
+    name: finscope-completo-v3_finscope_data
+  revo_socket:
+    name: finscope-completo-v3_finscope_socket
 
 networks:
   public:

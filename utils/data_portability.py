@@ -1,4 +1,4 @@
-"""Exportação e importação segura dos dados pessoais do FinScope."""
+"""Exportação e importação segura dos dados pessoais do Revo."""
 
 from __future__ import annotations
 
@@ -62,7 +62,7 @@ def build_account_export(user: dict[str, object]) -> bytes:
         archive.writestr(
             "LEIA-ME.txt",
             (
-                "Exportação de dados do FinScope\n\n"
+                "Exportação de dados do Revo\n\n"
                 "Os arquivos CSV podem ser abertos no Excel ou LibreOffice. "
                 "A exportação não contém senha, código de convite nem tokens.\n"
             ).encode("utf-8"),

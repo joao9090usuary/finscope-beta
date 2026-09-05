@@ -14,6 +14,8 @@ histórico.
 2. Confirme que `.env` não foi enviado; apenas `.env.example` deve existir no Git.
 3. Crie no Neon duas credenciais: a proprietária, usada somente para migrações,
    e `finscope_app`, sem `SUPERUSER`, propriedade de tabelas ou `BYPASSRLS`.
+   Esse nome e apenas um identificador tecnico legado, preservado para manter
+   compatibilidade com o banco da versao 5.1.4; a marca do produto e Revo.
 4. No Render, selecione **New > Blueprint** e conecte o repositório.
 5. Use `render.yaml` na raiz e revise os recursos antes de confirmar.
 
@@ -48,7 +50,7 @@ python -m jobs.provision_postgres
 
 Depois, monte no Neon a URL agrupada do mesmo papel `finscope_app` e salve-a
 como `DATABASE_URL` no Render. O `render.yaml` mantém migrações desativadas no
-processo web. Na inicialização, o FinScope bloqueia o uso de papéis com
+processo web. Na inicialização, o Revo bloqueia o uso de papéis com
 `BYPASSRLS`/`SUPERUSER` e também bloqueia se alguma tabela particular estiver
 sem RLS forçada. Apague as três variáveis administrativas do terminal ao terminar.
 

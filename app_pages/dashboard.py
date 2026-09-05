@@ -18,6 +18,7 @@ from utils.database import (
 )
 from utils.formatting import format_brl, format_percent
 from utils.pdf_report import build_financial_report
+from utils.ui import chart_theme, empty_chart_state, metric_card_grid, page_header
 
 
 PERIOD_LABELS = {
@@ -29,7 +30,7 @@ PERIOD_LABELS = {
 PERIOD_SHORT_LABELS = {1: "1 mês", 3: "3 meses", 6: "6 meses", 12: "1 ano"}
 CHART_COLORS = [
     "#60A5FA",
-    "#A78BFA",
+    "#8176FF",
     "#22D3EE",
     "#34D399",
     "#FBBF24",
@@ -240,6 +241,7 @@ def _monthly_flow(transactions: pd.DataFrame, start: date, end: date) -> pd.Data
 
 def _flow_chart(monthly: pd.DataFrame) -> alt.Chart:
     """Cria uma evolução em áreas suaves para receitas, despesas e saldo."""
+    theme = chart_theme()
     values = monthly.melt(
         id_vars=["Mês"],
         value_vars=["Receita", "Despesa", "Saldo"],
@@ -277,19 +279,21 @@ def _flow_chart(monthly: pd.DataFrame) -> alt.Chart:
         alt.layer(area, line)
         .properties(height=320)
         .interactive(bind_y=False)
+        .configure(background=theme["surface"])
         .configure_view(strokeOpacity=0)
         .configure_axis(
-            gridColor="#334155",
+            gridColor=theme["grid"],
             gridOpacity=0.28,
-            labelColor="#CBD5E1",
-            titleColor="#94A3B8",
+            labelColor=theme["muted"],
+            titleColor=theme["muted"],
         )
-        .configure_legend(labelColor="#CBD5E1")
+        .configure_legend(labelColor=theme["muted"])
     )
 
 
 def _donut_chart(expenses: pd.DataFrame) -> alt.Chart:
     """Cria uma rosca interativa das categorias de despesas."""
+    theme = chart_theme()
     grouped = (
         expenses.groupby("Categoria", as_index=False)["Valor"]
         .sum()
@@ -324,19 +328,20 @@ def _donut_chart(expenses: pd.DataFrame) -> alt.Chart:
     center = pd.DataFrame([{"Rótulo": "Total", "Total": format_brl(total)}])
     center_label = (
         alt.Chart(center)
-        .mark_text(color="#94A3B8", fontSize=12, dy=-10)
+        .mark_text(color=theme["muted"], fontSize=12, dy=-10)
         .encode(text="Rótulo:N")
     )
     center_value = (
         alt.Chart(center)
-        .mark_text(color="#F1F5F9", fontSize=20, fontWeight=700, dy=13)
+        .mark_text(color=theme["text"], fontSize=20, fontWeight=700, dy=13)
         .encode(text="Total:N")
     )
     return (
         alt.layer(arc, center_label, center_value)
         .properties(height=320)
+        .configure(background=theme["surface"])
         .configure_view(strokeOpacity=0)
-        .configure_legend(labelColor="#CBD5E1")
+        .configure_legend(labelColor=theme["muted"])
     )
 
 
@@ -406,9 +411,9 @@ def _dashboard_screen(user: dict, dashboard: dict) -> None:
     with st.container(key="dashboard_hero"):
         hero_text, hero_badge = st.columns([4, 1.2], vertical_alignment="center")
         with hero_text:
-            st.title(f"Sua vida financeira em perspectiva, {user['name'].split()[0]}")
+            st.title(f"Visão financeira de {user['name'].split()[0]}")
             st.write(
-                "Acompanhe padrões, ajuste sua rota e leve um resumo organizado com você."
+                "Acompanhe seu fluxo, identifique padrões e leve um resumo organizado com você."
             )
         with hero_badge:
             st.badge("Dashboard particular", icon=":material/verified_user:", color="green")
@@ -454,7 +459,7 @@ def _dashboard_screen(user: dict, dashboard: dict) -> None:
             st.download_button(
                 "Baixar relatório em PDF",
                 data=pdf_bytes,
-                file_name=f"finscope-relatorio-{selected_period}m-{end:%Y-%m-%d}.pdf",
+                file_name=f"revo-relatorio-{selected_period}m-{end:%Y-%m-%d}.pdf",
                 mime="application/pdf",
                 type="primary",
                 icon=":material/download:",
@@ -462,7 +467,7 @@ def _dashboard_screen(user: dict, dashboard: dict) -> None:
                 key="dashboard_pdf_download",
             )
             st.caption("O relatório é gerado somente para este download.")
-            st.divider()
+            st.space("small")
 
             @st.dialog("Excluir minha dashboard")
             def confirm_dashboard_deletion() -> None:
@@ -517,7 +522,7 @@ def _dashboard_screen(user: dict, dashboard: dict) -> None:
                 ("Saldo do período", format_brl(balance), monthly["Saldo"].tolist(), ":material/account_balance:"),
                 ("Custo do portfólio", format_brl(portfolio_cost), [], ":material/monitoring:"),
             ]
-            for column, (label, value, chart_data, icon) in zip(metric_columns, metric_values, strict=True):
+            for column, (label, value, chart_data, _icon) in zip(metric_columns, metric_values, strict=True):
                 with column:
                     chart_options = {}
                     if chart_data and any(abs(float(item)) > 0 for item in chart_data):
@@ -529,7 +534,6 @@ def _dashboard_screen(user: dict, dashboard: dict) -> None:
                         label_visibility="visible",
                         **chart_options,
                     )
-                    st.caption(icon)
 
         with st.container(key="dashboard_content"):
             trend_column, expense_column = st.columns([1.45, 1], gap="medium")
@@ -543,7 +547,7 @@ def _dashboard_screen(user: dict, dashboard: dict) -> None:
                             icon=":material/monitoring:",
                         )
                     else:
-                        st.altair_chart(_flow_chart(monthly), width="stretch")
+                        st.altair_chart(_flow_chart(monthly), width="stretch", theme=None)
 
             with expense_column:
                 with st.container(border=True, key="dashboard_insights"):
@@ -560,7 +564,7 @@ def _dashboard_screen(user: dict, dashboard: dict) -> None:
                             icon=":material/donut_large:",
                         )
                     else:
-                        st.altair_chart(_donut_chart(expenses), width="stretch")
+                        st.altair_chart(_donut_chart(expenses), width="stretch", theme=None)
 
             insight_title, insight_body = _insight_text(income, expense, balance)
             insight_column, portfolio_column = st.columns([1, 1], gap="medium")
@@ -605,12 +609,185 @@ def _dashboard_screen(user: dict, dashboard: dict) -> None:
                     )
 
 
-_dashboard_styles()
+def _creation_screen_v2(user: dict) -> None:
+    """Apresenta a ativação da dashboard no mesmo padrão visual do produto."""
+    first_name = str(user["name"]).split()[0]
+    page_header(
+        f"Crie sua dashboard, {first_name}",
+        "Escolha o período inicial para acompanhar fluxo, categorias, investimentos e gerar relatórios em PDF.",
+        eyebrow="Dashboard particular",
+    )
+    metric_card_grid(
+        [
+            {"label": "Análise", "value": "Fluxo de caixa", "delta": "Receitas, despesas e saldo", "icon": "monitoring", "tone": "blue"},
+            {"label": "Categorias", "value": "Visão de gastos", "delta": "Distribuição visual", "icon": "donut_large", "tone": "cyan"},
+            {"label": "Períodos", "value": "1 a 12 meses", "delta": "Comparação flexível", "icon": "date_range", "tone": "violet"},
+            {"label": "Relatório", "value": "PDF privado", "delta": "Gerado sob demanda", "icon": "picture_as_pdf", "tone": "green"},
+        ]
+    )
+    with st.container(border=True, key="dashboard_create_card"):
+        st.subheader("Configuração inicial", anchor=False)
+        st.caption("A dashboard utiliza somente os dados da sua conta e pode ser removida depois.")
+        default_label = st.segmented_control(
+            "Período inicial",
+            options=list(PERIOD_SHORT_LABELS.values()),
+            default="1 mês",
+            key="dashboard_creation_period_v2",
+        )
+        selected_period = next(months for months, label in PERIOD_SHORT_LABELS.items() if label == default_label)
+        if st.button("Criar minha dashboard", type="primary", icon=":material/add_chart:", width="stretch"):
+            ok, message = create_dashboard(user["id"], selected_period)
+            if ok:
+                st.toast(message, icon=":material/check_circle:")
+                st.rerun()
+            st.error(message)
+
+
+def _dashboard_screen_v2(user: dict, dashboard: dict) -> None:
+    """Renderiza a dashboard em largura total, sem o painel lateral duplicado."""
+    first_name = str(user["name"]).split()[0]
+    page_header(
+        f"Sua vida financeira em perspectiva, {first_name}",
+        "Acompanhe padrões, ajuste sua rota e leve um resumo organizado com você.",
+        eyebrow="Dashboard particular",
+    )
+
+    period_options = list(PERIOD_LABELS.values())
+    saved_period = dashboard["preferred_period"]
+    with st.container(key="dashboard_toolbar"):
+        period_column, range_column, pdf_column, delete_column = st.columns(
+            [1.25, 1.65, 1.05, .9], vertical_alignment="bottom"
+        )
+        with period_column:
+            selected_label = st.selectbox(
+                "Período da análise",
+                options=period_options,
+                index=list(PERIOD_LABELS).index(saved_period),
+                key="dashboard_period_select_v2",
+            )
+        selected_period = next(months for months, label in PERIOD_LABELS.items() if label == selected_label)
+        if selected_period != saved_period:
+            update_dashboard_period(user["id"], selected_period)
+            st.rerun()
+
+        start = _start_date(selected_period)
+        end = date.today()
+        transactions = transactions_frame(user["id"], start_date=start)
+        holdings = holdings_frame(user["id"])
+        pdf_bytes = build_financial_report(
+            user=user,
+            months=selected_period,
+            start_date=start,
+            end_date=end,
+            transactions=transactions,
+            holdings=holdings,
+        )
+        with range_column:
+            st.caption(f"Período analisado: **{start:%d/%m/%Y} a {end:%d/%m/%Y}**")
+        with pdf_column:
+            st.download_button(
+                "Baixar PDF",
+                data=pdf_bytes,
+                file_name=f"revo-relatorio-{selected_period}m-{end:%Y-%m-%d}.pdf",
+                mime="application/pdf",
+                type="primary",
+                icon=":material/download:",
+                width="stretch",
+                key="dashboard_pdf_download_v2",
+            )
+
+        @st.dialog("Excluir minha dashboard")
+        def confirm_dashboard_deletion_v2() -> None:
+            st.warning(
+                "A organização da dashboard será removida. Seus lançamentos e investimentos continuarão salvos.",
+                icon=":material/warning:",
+            )
+            if st.button("Excluir dashboard", type="primary", icon=":material/delete_forever:", width="stretch"):
+                delete_dashboard(user["id"])
+                st.session_state.pop("dashboard_period_select_v2", None)
+                st.rerun()
+
+        with delete_column:
+            if st.button("Excluir", icon=":material/delete_outline:", width="stretch", key="dashboard_delete_open_v2"):
+                confirm_dashboard_deletion_v2()
+
+    income = float(transactions.loc[transactions["Tipo"] == "Receita", "Valor"].sum()) if not transactions.empty else 0.0
+    expense = float(transactions.loc[transactions["Tipo"] == "Despesa", "Valor"].sum()) if not transactions.empty else 0.0
+    balance = income - expense
+    portfolio_cost = float((holdings["Quantidade"] * holdings["Preço médio"]).sum()) if not holdings.empty else 0.0
+    savings_rate = balance / income * 100 if income else 0.0
+    monthly = _monthly_flow(transactions, start, end)
+    expenses = transactions.loc[transactions["Tipo"] == "Despesa"] if not transactions.empty else transactions
+
+    metric_card_grid(
+        [
+            {"label": "Saldo do período", "value": format_brl(balance), "delta": f"Economia de {format_percent(savings_rate, 0)}", "icon": "account_balance_wallet", "tone": "green", "delta_tone": "positive" if balance >= 0 else "negative"},
+            {"label": "Receitas", "value": format_brl(income), "delta": PERIOD_LABELS[selected_period], "icon": "trending_up", "tone": "green", "delta_tone": "positive"},
+            {"label": "Despesas", "value": format_brl(expense), "delta": "Gastos no período", "icon": "trending_down", "tone": "red", "delta_tone": "negative" if expense else "neutral"},
+            {
+                "label": "Investimentos",
+                "value": format_brl(portfolio_cost),
+                "delta": f"{len(holdings)} {'ativo acompanhado' if len(holdings) == 1 else 'ativos acompanhados'}",
+                "icon": "pie_chart",
+                "tone": "violet",
+                "delta_tone": "positive" if len(holdings) else "neutral",
+            },
+        ]
+    )
+
+    with st.container(key="dashboard_primary_grid"):
+        trend_column, expense_column = st.columns([1.55, 1], gap="medium")
+        with trend_column:
+            with st.container(border=True, key="dashboard_chart_v2"):
+                st.subheader("Fluxo de caixa", anchor=False)
+                st.caption("Receitas, despesas e saldo acumulado por mês.")
+                if transactions.empty:
+                    empty_chart_state("Registre uma movimentação para visualizar a evolução mensal.")
+                else:
+                    st.altair_chart(_flow_chart(monthly), width="stretch", key="dashboard_flow_chart_v2", theme=None)
+        with expense_column:
+            with st.container(border=True, key="dashboard_categories_v2"):
+                st.subheader("Despesas por categoria", anchor=False)
+                st.caption("Passe o cursor para consultar valores e participação.")
+                if expenses.empty or float(expenses["Valor"].sum()) <= 0:
+                    empty_chart_state("As categorias aparecerão após a primeira despesa.", icon="donut_large")
+                else:
+                    st.altair_chart(_donut_chart(expenses), width="stretch", key="dashboard_donut_chart_v2", theme=None)
+
+    insight_title, insight_body = _insight_text(income, expense, balance)
+    with st.container(key="dashboard_lower_grid"):
+        recent_column, goal_column = st.columns([1.55, 1], gap="medium")
+        with recent_column:
+            with st.container(border=True, key="dashboard_recent_v2"):
+                st.subheader("Transações recentes", anchor=False)
+                if transactions.empty:
+                    st.info("Ainda não há movimentações neste período.", icon=":material/receipt_long:")
+                    st.caption("Novos registros feitos em Finanças pessoais aparecerão aqui.")
+                else:
+                    st.dataframe(
+                        transactions.head(7).drop(columns="id"),
+                        hide_index=True,
+                        width="stretch",
+                        column_config={
+                            "Valor": st.column_config.NumberColumn(format="R$ %.2f"),
+                            "Data": st.column_config.DateColumn(format="DD/MM/YYYY"),
+                        },
+                    )
+        with goal_column:
+            with st.container(border=True, key="dashboard_health_v2"):
+                st.subheader(insight_title, anchor=False)
+                st.write(insight_body)
+                if income > 0:
+                    committed = min(expense / income, 1.0)
+                    st.progress(committed, text=f"{format_percent(expense / income * 100, 0)} da receita comprometida")
+                st.metric("Taxa de economia", format_percent(savings_rate))
+                st.caption(f"Relatório privado de {start:%d/%m/%Y} a {end:%d/%m/%Y}.")
+
+
 current_user = st.session_state.user
 dashboard_config = get_dashboard(current_user["id"])
 
 if dashboard_config:
-    _dashboard_screen(current_user, dashboard_config)
+    _dashboard_screen_v2(current_user, dashboard_config)
 else:
-    _creation_screen(current_user)
-
+    _creation_screen_v2(current_user)

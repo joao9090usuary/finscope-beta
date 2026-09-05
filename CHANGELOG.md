@@ -57,7 +57,7 @@ O formato segue as categorias do Keep a Changelog.
 ### Alterado
 
 - Redesenho responsivo da tela de login e cadastro em um cartão dividido.
-- Apresentação visual alinhada à identidade financeira do FinScope.
+- Apresentação visual alinhada à identidade financeira do Revo.
 - Redução dos espaçamentos e centralização do conteúdo de autenticação.
 - Bloqueio do deslocamento e da rolagem horizontal em diferentes resoluções.
 

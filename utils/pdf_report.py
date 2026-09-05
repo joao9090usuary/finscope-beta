@@ -58,7 +58,7 @@ def _styles() -> dict[str, ParagraphStyle]:
     sample = getSampleStyleSheet()
     return {
         "title": ParagraphStyle(
-            "FinScopeTitle",
+            "RevoTitle",
             parent=sample["Title"],
             fontName="Helvetica-Bold",
             fontSize=21,
@@ -68,7 +68,7 @@ def _styles() -> dict[str, ParagraphStyle]:
             spaceAfter=1 * mm,
         ),
         "subtitle": ParagraphStyle(
-            "FinScopeSubtitle",
+            "RevoSubtitle",
             parent=sample["BodyText"],
             fontName="Helvetica",
             fontSize=9.5,
@@ -76,7 +76,7 @@ def _styles() -> dict[str, ParagraphStyle]:
             textColor=HexColor("#CBD5E1"),
         ),
         "section": ParagraphStyle(
-            "FinScopeSection",
+            "RevoSection",
             parent=sample["Heading2"],
             fontName="Helvetica-Bold",
             fontSize=13,
@@ -86,7 +86,7 @@ def _styles() -> dict[str, ParagraphStyle]:
             spaceAfter=2.5 * mm,
         ),
         "body": ParagraphStyle(
-            "FinScopeBody",
+            "RevoBody",
             parent=sample["BodyText"],
             fontName="Helvetica",
             fontSize=9,
@@ -94,7 +94,7 @@ def _styles() -> dict[str, ParagraphStyle]:
             textColor=TEXT,
         ),
         "small": ParagraphStyle(
-            "FinScopeSmall",
+            "RevoSmall",
             parent=sample["BodyText"],
             fontName="Helvetica",
             fontSize=7.5,
@@ -137,7 +137,7 @@ def _page_footer(canvas, document) -> None:
     canvas.line(18 * mm, 13 * mm, A4[0] - 18 * mm, 13 * mm)
     canvas.setFont("Helvetica", 7.5)
     canvas.setFillColor(MUTED)
-    canvas.drawString(18 * mm, 8.5 * mm, "FinScope — relatório financeiro pessoal")
+    canvas.drawString(18 * mm, 8.5 * mm, "Revo — relatório financeiro pessoal")
     canvas.drawRightString(
         A4[0] - 18 * mm,
         8.5 * mm,
@@ -297,8 +297,8 @@ def build_financial_report(
         leftMargin=18 * mm,
         topMargin=16 * mm,
         bottomMargin=18 * mm,
-        title=f"Relatório financeiro FinScope — {months} meses",
-        author="FinScope",
+        title=f"Relatório financeiro Revo — {months} meses",
+        author="Revo",
         subject="Resumo financeiro pessoal",
     )
     story: list = []
@@ -306,7 +306,7 @@ def build_financial_report(
     header = Table(
         [
             [
-                Paragraph("FinScope", styles["title"]),
+                Paragraph("Revo", styles["title"]),
                 Paragraph(
                     "RELATÓRIO FINANCEIRO<br/>"
                     f"{start_date:%d/%m/%Y} a {end_date:%d/%m/%Y}",

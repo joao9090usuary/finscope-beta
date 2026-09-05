@@ -14,13 +14,14 @@ from utils.database import (
     user_summary,
 )
 from utils.formatting import format_brl, format_percent
+from utils.ui import chart_theme, empty_chart_state, metric_card_grid, page_header
 
 
 user = st.session_state.user
-FLOW_COLORS = ["#22C55E", "#FB7185"]
+FLOW_COLORS = ["#34D399", "#FB7185"]
 CATEGORY_COLORS = [
     "#60A5FA",
-    "#A78BFA",
+    "#8176FF",
     "#22D3EE",
     "#34D399",
     "#FBBF24",
@@ -32,6 +33,7 @@ CATEGORY_COLORS = [
 
 def _flow_area_chart(flow):
     """Cria uma leitura temporal suave, interativa e fiel às cores financeiras."""
+    theme = chart_theme()
     base = alt.Chart(flow).encode(
         x=alt.X(
             "Data:T",
@@ -60,19 +62,21 @@ def _flow_area_chart(flow):
         alt.layer(area, line)
         .properties(height=320)
         .interactive(bind_y=False)
+        .configure(background=theme["surface"])
         .configure_view(strokeOpacity=0)
         .configure_axis(
-            gridColor="#334155",
+            gridColor=theme["grid"],
             gridOpacity=0.28,
-            labelColor="#CBD5E1",
-            titleColor="#94A3B8",
+            labelColor=theme["muted"],
+            titleColor=theme["muted"],
         )
-        .configure_legend(labelColor="#CBD5E1")
+        .configure_legend(labelColor=theme["muted"])
     )
 
 
 def _expense_donut_chart(expenses):
     """Apresenta participação por categoria com total central e destaque ao passar o cursor."""
+    theme = chart_theme()
     frame = expenses.copy()
     total = float(frame["Valor"].sum())
     frame["Participação"] = frame["Valor"] / total
@@ -105,19 +109,20 @@ def _expense_donut_chart(expenses):
     )
     center_label = (
         alt.Chart(center)
-        .mark_text(color="#94A3B8", fontSize=12, dy=-10)
+        .mark_text(color=theme["muted"], fontSize=12, dy=-10)
         .encode(text="Rótulo:N")
     )
     center_value = (
         alt.Chart(center)
-        .mark_text(color="#F1F5F9", fontSize=20, fontWeight=700, dy=13)
+        .mark_text(color=theme["text"], fontSize=20, fontWeight=700, dy=13)
         .encode(text="Total:N")
     )
     return (
         alt.layer(arc, center_label, center_value)
         .properties(height=320)
+        .configure(background=theme["surface"])
         .configure_view(strokeOpacity=0)
-        .configure_legend(labelColor="#CBD5E1")
+        .configure_legend(labelColor=theme["muted"])
     )
 
 
@@ -172,8 +177,14 @@ def new_transaction() -> None:
         st.rerun()
 
 
-st.title("Finanças pessoais")
+page_header(
+    "Finanças pessoais",
+    "Registre receitas e despesas e entenda como seu dinheiro se movimenta.",
+    eyebrow="Organização financeira",
+    meta="Informações privadas da sua conta",
+)
 with st.container(
+    key="finance_toolbar",
     horizontal=True,
     horizontal_alignment="distribute",
     vertical_alignment="center",
@@ -195,43 +206,47 @@ with st.expander("Como usar esta área", icon=":material/help:"):
 
 data = transactions_frame(user["id"])
 summary = user_summary(user["id"])
-metric_columns = st.columns(4, gap="medium")
-with metric_columns[0]:
-    st.metric("Saldo", format_brl(summary["balance"]), border=True)
-with metric_columns[1]:
-    st.metric("Total recebido", format_brl(summary["income"]), border=True)
-with metric_columns[2]:
-    st.metric("Total gasto", format_brl(summary["expense"]), border=True)
 savings = summary["balance"] / summary["income"] * 100 if summary["income"] else 0
-with metric_columns[3]:
-    st.metric("Taxa de economia", format_percent(savings), border=True)
+metric_card_grid(
+    [
+        {"label": "Saldo", "value": format_brl(summary["balance"]), "delta": "Receitas menos despesas", "icon": "account_balance_wallet", "tone": "green", "delta_tone": "positive" if summary["balance"] >= 0 else "negative"},
+        {"label": "Total recebido", "value": format_brl(summary["income"]), "delta": "Receitas registradas", "icon": "trending_up", "tone": "green", "delta_tone": "positive"},
+        {"label": "Total gasto", "value": format_brl(summary["expense"]), "delta": "Despesas registradas", "icon": "trending_down", "tone": "red", "delta_tone": "negative" if summary["expense"] else "neutral"},
+        {"label": "Taxa de economia", "value": format_percent(savings), "delta": "Sobre a renda", "icon": "savings", "tone": "violet", "delta_tone": "positive" if savings >= 0 else "negative"},
+    ]
+)
 
 if data.empty:
+    # Mantém o contrato de colunas mesmo quando a conta ainda não possui
+    # lançamentos. Isso evita que os gráficos tentem agrupar um DataFrame sem
+    # a coluna "Data" no primeiro acesso de uma conta nova.
+    filtered = data.reindex(
+        columns=["id", "Data", "Tipo", "Categoria", "Descrição", "Valor"]
+    )
     st.info(
-        "Ainda não há lançamentos. Comece registrando sua renda ou sua primeira "
-        "despesa.",
+        "Ainda não há lançamentos. A estrutura de análise já está pronta; "
+        "registre uma receita ou despesa para preencher os gráficos.",
         icon=":material/receipt_long:",
     )
-    st.stop()
+else:
+    with st.popover("Filtrar lançamentos", icon=":material/filter_list:"):
+        selected_types = st.pills(
+            "Tipos",
+            ["Receita", "Despesa"],
+            default=["Receita", "Despesa"],
+            selection_mode="multi",
+        )
+        available_categories = sorted(data["Categoria"].unique())
+        selected_categories = st.multiselect(
+            "Categorias",
+            available_categories,
+            default=available_categories,
+        )
 
-with st.popover("Filtrar lançamentos", icon=":material/filter_list:"):
-    selected_types = st.pills(
-        "Tipos",
-        ["Receita", "Despesa"],
-        default=["Receita", "Despesa"],
-        selection_mode="multi",
-    )
-    available_categories = sorted(data["Categoria"].unique())
-    selected_categories = st.multiselect(
-        "Categorias",
-        available_categories,
-        default=available_categories,
-    )
-
-filtered = data[
-    data["Tipo"].isin(selected_types or [])
-    & data["Categoria"].isin(selected_categories)
-]
+    filtered = data[
+        data["Tipo"].isin(selected_types or [])
+        & data["Categoria"].isin(selected_categories)
+    ]
 
 left, right = st.columns(2, gap="medium")
 with left:
@@ -239,9 +254,12 @@ with left:
         st.subheader("Fluxo ao longo do tempo", anchor=False)
         flow = filtered.groupby(["Data", "Tipo"], as_index=False)["Valor"].sum()
         if flow.empty:
-            st.caption("Nenhum lançamento corresponde aos filtros selecionados.")
+            empty_chart_state(
+                "O histórico aparecerá após o primeiro lançamento.",
+                icon="monitoring",
+            )
         else:
-            st.altair_chart(_flow_area_chart(flow), width="stretch")
+            st.altair_chart(_flow_area_chart(flow), width="stretch", theme=None)
 
 with right:
     with st.container(border=True):
@@ -253,39 +271,49 @@ with right:
             .sort_values("Valor", ascending=False)
         )
         if expenses.empty:
-            st.caption("Adicione despesas para visualizar a distribuição.")
+            empty_chart_state(
+                "As categorias aparecerão após a primeira despesa.",
+                icon="donut_large",
+            )
         else:
-            st.altair_chart(_expense_donut_chart(expenses), width="stretch")
+            st.altair_chart(_expense_donut_chart(expenses), width="stretch", theme=None)
 
 with st.container(border=True):
     st.subheader("Seus lançamentos", anchor=False)
-    st.dataframe(
-        filtered.drop(columns="id"),
-        hide_index=True,
-        column_config={
-            "Valor": st.column_config.NumberColumn(format="R$ %.2f"),
-            "Data": st.column_config.DateColumn(format="DD/MM/YYYY"),
-        },
-        key="transactions_table",
-    )
-    with st.popover("Excluir um lançamento", icon=":material/delete:"):
-        choices = {
-            (
-                f"{row.Tipo} · {row.Categoria} · {format_brl(row.Valor)} · "
-                f"{row.Data:%d/%m/%Y}"
-            ): int(row.id)
-            for row in data.itertuples()
-        }
-        choice = st.selectbox(
-            "Selecione um lançamento",
-            list(choices),
-            key="delete_transaction_choice",
+    if filtered.empty:
+        st.info(
+            "Nenhum lançamento para exibir. Use **Novo lançamento** para começar.",
+            icon=":material/table_rows:",
         )
-        if st.button(
-            "Confirmar exclusão",
-            type="primary",
-            icon=":material/delete_forever:",
-        ):
-            delete_transaction(user["id"], choices[choice])
-            st.toast("Lançamento excluído.")
-            st.rerun()
+        st.caption("Aqui você verá data, tipo, categoria, descrição e valor.")
+    else:
+        st.dataframe(
+            filtered.drop(columns="id"),
+            hide_index=True,
+            column_config={
+                "Valor": st.column_config.NumberColumn(format="R$ %.2f"),
+                "Data": st.column_config.DateColumn(format="DD/MM/YYYY"),
+            },
+            key="transactions_table",
+        )
+        with st.popover("Excluir um lançamento", icon=":material/delete:"):
+            choices = {
+                (
+                    f"{row.Tipo} · {row.Categoria} · {format_brl(row.Valor)} · "
+                    f"{row.Data:%d/%m/%Y}"
+                ): int(row.id)
+                for row in data.itertuples()
+            }
+            choice = st.selectbox(
+                "Selecione um lançamento",
+                list(choices),
+                key="delete_transaction_choice",
+            )
+            if st.button(
+                "Confirmar exclusão",
+                type="primary",
+                icon=":material/delete_forever:",
+            ):
+                delete_transaction(user["id"], choices[choice])
+                st.toast("Lançamento excluído.")
+                st.rerun()

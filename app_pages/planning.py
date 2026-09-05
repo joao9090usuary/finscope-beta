@@ -22,6 +22,16 @@ from utils.database import (
     update_goal_amount,
 )
 from utils.formatting import format_brl
+from utils.ui import metric_card_grid, page_header
+
+
+def _quantity_label(total: int, singular: str, plural: str) -> str:
+    return f"{total} {singular if total == 1 else plural}"
+
+
+def _progress_money(value: float) -> str:
+    """Escapa o cifrão em textos Markdown internos do progresso."""
+    return format_brl(value).replace("$", r"\$")
 
 
 user = st.session_state.user
@@ -75,8 +85,31 @@ def new_recurring() -> None:
         st.rerun()
 
 
-st.title("Planejamento")
-st.write("Defina limites, acompanhe objetivos e organize os compromissos do mês.")
+page_header(
+    "Planejamento",
+    "Defina limites, acompanhe objetivos e organize os compromissos do mês.",
+    eyebrow="Planos e objetivos",
+    meta="Orçamentos, metas e recorrências",
+)
+
+budgets = budgets_frame(user["id"])
+goals = goals_frame(user["id"])
+recurring = recurring_frame(user["id"])
+month_start = date.today().replace(day=1)
+month_transactions = transactions_frame(user["id"], month_start)
+
+budget_limit = float(budgets["Limite"].sum()) if not budgets.empty else 0.0
+goal_saved = float(goals["Guardado"].sum()) if not goals.empty else 0.0
+active_recurring = recurring[recurring["Ativa"]] if not recurring.empty else recurring
+recurring_total = float(active_recurring["Valor"].sum()) if not active_recurring.empty else 0.0
+metric_card_grid(
+    [
+        {"label": "Limites mensais", "value": format_brl(budget_limit), "delta": _quantity_label(len(budgets), "categoria", "categorias"), "icon": "account_balance", "tone": "blue"},
+        {"label": "Guardado em metas", "value": format_brl(goal_saved), "delta": _quantity_label(len(goals), "objetivo", "objetivos"), "icon": "flag", "tone": "green", "delta_tone": "positive" if goal_saved else "neutral"},
+        {"label": "Recorrências ativas", "value": format_brl(recurring_total), "delta": _quantity_label(len(active_recurring), "compromisso", "compromissos"), "icon": "event_repeat", "tone": "violet"},
+        {"label": "Movimentações no mês", "value": str(len(month_transactions)), "delta": "Registros confirmados", "icon": "calendar_month", "tone": "cyan"},
+    ]
+)
 
 budget_tab, goal_tab, recurring_tab, calendar_tab = st.tabs(
     ["Orçamentos", "Metas", "Recorrências", "Calendário"]
@@ -87,7 +120,6 @@ with budget_tab:
         st.subheader("Orçamento mensal", anchor=False)
         if st.button("Adicionar orçamento", icon=":material/add:", key="open_budget"):
             new_budget()
-    budgets = budgets_frame(user["id"])
     if budgets.empty:
         st.info("Defina um limite para uma categoria de despesa.", icon=":material/info:")
     else:
@@ -97,7 +129,7 @@ with budget_tab:
                 left, right = st.columns([3, 1])
                 with left:
                     st.markdown(f"#### {row.Categoria}")
-                    st.progress(ratio, text=f"{format_brl(row.Gasto)} de {format_brl(row.Limite)}")
+                    st.progress(ratio, text=f"{_progress_money(row.Gasto)} de {_progress_money(row.Limite)}")
                     if row.Disponível < 0:
                         st.error(f"Limite excedido em {format_brl(abs(row.Disponível))}.")
                     else:
@@ -112,14 +144,13 @@ with goal_tab:
         st.subheader("Metas financeiras", anchor=False)
         if st.button("Adicionar meta", icon=":material/add:", key="open_goal"):
             new_goal()
-    goals = goals_frame(user["id"])
     if goals.empty:
         st.info("Crie uma meta para acompanhar seu progresso.", icon=":material/flag:")
     else:
         for row in goals.itertuples():
             with st.container(border=True):
                 st.markdown(f"#### {row.Meta}")
-                st.progress(float(row.Progresso), text=f"{format_brl(row.Guardado)} de {format_brl(row.Objetivo)}")
+                st.progress(float(row.Progresso), text=f"{_progress_money(row.Guardado)} de {_progress_money(row.Objetivo)}")
                 if row.Prazo:
                     st.caption(f"Prazo: {row.Prazo:%d/%m/%Y}")
                 amount = st.number_input(
@@ -142,7 +173,6 @@ with recurring_tab:
         st.subheader("Lançamentos recorrentes", anchor=False)
         if st.button("Adicionar recorrência", icon=":material/add:", key="open_recurring"):
             new_recurring()
-    recurring = recurring_frame(user["id"])
     if recurring.empty:
         st.info("Cadastre salário, aluguel ou outro compromisso mensal.", icon=":material/event_repeat:")
     else:
@@ -162,6 +192,10 @@ with recurring_tab:
                     (st.toast if ok else st.warning)(message)
                     if ok:
                         st.rerun()
+                if occurrence_date > date.today() and bool(row.Ativa):
+                    st.caption(
+                        f"A confirmação ficará disponível em {occurrence_date:%d/%m/%Y}."
+                    )
                 new_status = status_col.toggle("Ativa", value=bool(row.Ativa), key=f"rec_active_{row.id}")
                 if new_status != bool(row.Ativa):
                     set_recurring_active(user["id"], int(row.id), new_status)
@@ -172,9 +206,7 @@ with recurring_tab:
 
 with calendar_tab:
     st.subheader("Calendário financeiro do mês", anchor=False)
-    month_start = date.today().replace(day=1)
-    transactions = transactions_frame(user["id"], month_start)
-    recurring = recurring_frame(user["id"])
+    transactions = month_transactions
     events: list[dict[str, object]] = []
     if not transactions.empty:
         for row in transactions.itertuples():

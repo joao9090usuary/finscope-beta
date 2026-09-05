@@ -1,8 +1,8 @@
-# Arquitetura do FinScope
+# Arquitetura do Revo
 
 ## Visão geral
 
-O FinScope utiliza uma arquitetura modular adequada a uma beta pequena. O
+O Revo utiliza uma arquitetura modular adequada a uma beta pequena. O
 Streamlit controla a interface e a sessão autenticada; o SQLAlchemy concentra a
 persistência; e os módulos de serviço encapsulam integrações externas.
 

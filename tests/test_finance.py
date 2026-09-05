@@ -1,12 +1,19 @@
 """Testes de interpretação das respostas da API financeira."""
 
 import unittest
+from unittest.mock import patch
 
-from utils.finance import normalize_ticker, parse_brapi_history, parse_brapi_quote
+from utils.finance import (
+    MarketDataError,
+    normalize_ticker,
+    parse_brapi_history,
+    parse_brapi_quote,
+    prices,
+)
 
 
 class FinanceTest(unittest.TestCase):
-    """Valida os formatos de histórico e cotação utilizados pelo FinScope."""
+    """Valida os formatos de histórico e cotação utilizados pelo Revo."""
 
     def test_brapi_v2_history_uses_adjusted_close(self) -> None:
         """O histórico deve priorizar o fechamento ajustado quando disponível."""
@@ -63,6 +70,15 @@ class FinanceTest(unittest.TestCase):
         self.assertEqual(normalize_ticker("^bvsp"), "^BVSP")
         with self.assertRaisesRegex(ValueError, "negociação da B3"):
             normalize_ticker("BITCOIN")
+
+    @patch("utils.finance._yahoo_history", side_effect=MarketDataError("offline"))
+    @patch("utils.finance._brapi_history", side_effect=MarketDataError("offline"))
+    def test_unknown_ticker_never_receives_fabricated_demo_data(
+        self, _brapi, _yahoo
+    ) -> None:
+        prices.clear()
+        with self.assertRaisesRegex(MarketDataError, "confirmar este ativo"):
+            prices("XXXX4", "1mo")
 
 
 if __name__ == "__main__":

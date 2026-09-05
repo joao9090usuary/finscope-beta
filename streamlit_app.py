@@ -1,4 +1,4 @@
-"""Ponto de entrada, autenticação e navegação do FinScope Beta 5.2.
+"""Ponto de entrada, autenticação e navegação do Revo Beta 5.2.
 
 A versão atual mantém a recuperação de senha por e-mail, mas não exige a
 verificação do endereço eletrônico para permitir o acesso. A estrutura de
@@ -24,11 +24,13 @@ from utils.email_service import (
     send_feedback_email,
     send_password_reset_email,
 )
+from utils.ui import inject_app_styles
 
 st.set_page_config(
-    page_title="FinScope",
-    page_icon=":material/account_balance_wallet:",
+    page_title="Revo",
+    page_icon="static/revo-logo.png",
     layout="wide",
+    initial_sidebar_state="expanded",
 )
 
 MOBILE_NAVIGATION_JS = r"""
@@ -45,6 +47,7 @@ export default function(component) {
     let startX = 0;
     let startY = 0;
     let startedAt = 0;
+    let sidebarWasOpen = false;
 
     const isMobile = () => window.matchMedia("(max-width: 900px)").matches;
     const isInteractive = (target) => Boolean(target?.closest(
@@ -71,6 +74,19 @@ export default function(component) {
         });
     };
 
+    const findSidebarCloseButton = () => document.querySelector(
+        '[data-testid="stSidebarCollapseButton"] button, '
+        + '[data-testid="stSidebar"] button[aria-label*="Close" i], '
+        + '[data-testid="stSidebar"] button[aria-label*="Fechar" i]'
+    );
+
+    const isSidebarOpen = () => {
+        const sidebar = document.querySelector('[data-testid="stSidebar"]');
+        if (!sidebar) return false;
+        const style = window.getComputedStyle(sidebar);
+        return style.display !== "none" && sidebar.getBoundingClientRect().width > 40;
+    };
+
     const onTouchStart = (event) => {
         if (!isMobile() || event.touches.length !== 1 || isInteractive(event.target)) {
             tracking = false;
@@ -81,6 +97,8 @@ export default function(component) {
         startX = touch.clientX;
         startY = touch.clientY;
         startedAt = performance.now();
+        sidebarWasOpen = isSidebarOpen();
+        tracking = sidebarWasOpen || touch.clientX <= 84;
     };
 
     const onTouchEnd = (event) => {
@@ -91,8 +109,10 @@ export default function(component) {
         const verticalDistance = Math.abs(touch.clientY - startY);
         const duration = performance.now() - startedAt;
 
-        if (horizontalDistance >= 72 && verticalDistance <= 56 && duration <= 800) {
+        if (!sidebarWasOpen && horizontalDistance >= 72 && verticalDistance <= 56 && duration <= 800) {
             findSidebarButton()?.click();
+        } else if (sidebarWasOpen && horizontalDistance <= -72 && verticalDistance <= 56 && duration <= 800) {
+            findSidebarCloseButton()?.click();
         }
     };
 
@@ -100,33 +120,157 @@ export default function(component) {
         tracking = false;
     };
 
+    const onSidebarNavigation = (event) => {
+        if (!isMobile()) return;
+        const link = event.target?.closest(
+            '[data-testid="stSidebarNav"] a, [data-testid="stSidebar"] a'
+        );
+        if (!link) return;
+        window.setTimeout(() => {
+            window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+            document.querySelector('[data-testid="stAppViewContainer"]')?.scrollTo({
+                top: 0, left: 0, behavior: "auto"
+            });
+        }, 40);
+        window.setTimeout(() => findSidebarCloseButton()?.click(), 120);
+    };
+
+    let initialCloseAttempts = 0;
+    const initialCloseTimer = window.setInterval(() => {
+        initialCloseAttempts += 1;
+        if (isMobile() && isSidebarOpen()) {
+            findSidebarCloseButton()?.click();
+            window.clearInterval(initialCloseTimer);
+        } else if (!isMobile() || initialCloseAttempts >= 12) {
+            window.clearInterval(initialCloseTimer);
+        }
+    }, 140);
+
     document.addEventListener("touchstart", onTouchStart, { passive: true });
     document.addEventListener("touchend", onTouchEnd, { passive: true });
     document.addEventListener("touchcancel", onTouchCancel, { passive: true });
+    document.addEventListener("click", onSidebarNavigation, true);
 
     return () => {
+        window.clearInterval(initialCloseTimer);
         document.removeEventListener("touchstart", onTouchStart);
         document.removeEventListener("touchend", onTouchEnd);
         document.removeEventListener("touchcancel", onTouchCancel);
+        document.removeEventListener("click", onSidebarNavigation, true);
     };
 }
 """
 
 mobile_navigation_gesture = st.components.v2.component(
-    "finscope_mobile_navigation_gesture",
+    "revo_mobile_navigation_gesture",
     js=MOBILE_NAVIGATION_JS,
+)
+
+THEME_SYNC_JS = r"""
+export default function(component) {
+    const { data } = component;
+    const root = component.parentElement instanceof ShadowRoot
+        ? component.parentElement.host
+        : component.parentElement;
+    const wrapper = root?.closest('[data-testid="stElementContainer"]');
+    if (wrapper) wrapper.style.display = "none";
+
+    const desired = data?.light ? "Light" : "Dark";
+    const desiredType = desired.toLowerCase();
+    const paths = new Set([window.location.pathname, ...(data?.paths || [])]);
+
+    for (const pathname of paths) {
+        const normalized = pathname === "" ? "/" : pathname;
+        const key = `stActiveTheme-${normalized}-v2`;
+        const next = JSON.stringify(desired);
+        if (window.localStorage.getItem(key) !== next) {
+            window.localStorage.setItem(key, next);
+        }
+    }
+
+    if (data?.current && data.current !== desiredType) {
+        const chooseTheme = (attempt = 0) => {
+            const menuButton = document.querySelector('[data-testid="stMainMenuButton"]');
+            if (!menuButton) {
+                if (attempt < 12) window.setTimeout(() => chooseTheme(attempt + 1), 60);
+                return;
+            }
+
+            if (menuButton.getAttribute("aria-expanded") !== "true") {
+                menuButton.click();
+            }
+
+            window.setTimeout(() => {
+                const choices = Array.from(document.querySelectorAll('[role="menuitemradio"]'));
+                const target = choices.find((choice) =>
+                    (choice.textContent || "").trim().toLowerCase().endsWith(desiredType)
+                );
+                if (target) {
+                    target.click();
+                    window.setTimeout(() => {
+                        if (menuButton.getAttribute("aria-expanded") === "true") {
+                            menuButton.click();
+                        }
+                    }, 90);
+                } else if (attempt < 12) {
+                    chooseTheme(attempt + 1);
+                }
+            }, 35);
+        };
+        chooseTheme();
+    }
+}
+"""
+
+sync_browser_theme = st.components.v2.component(
+    "revo_browser_theme_sync",
+    js=THEME_SYNC_JS,
 )
 
 st.session_state.setdefault("user", None)
 st.session_state.setdefault("help_messages", [])
 st.session_state.setdefault("help_pending_prompt", None)
 st.session_state.setdefault("flash", None)
+try:
+    initial_light_theme = st.context.theme.type == "light"
+except (AttributeError, RuntimeError):
+    initial_light_theme = False
+st.session_state.setdefault("theme_light", initial_light_theme)
 
 
 def apply_auth_layout() -> None:
-    """Mantém a autenticação compacta, centralizada e sem rolagem lateral."""
+    """Aplica o sistema visual responsivo das telas públicas de autenticação."""
+    light_theme = bool(st.session_state.get("theme_light", False))
+    palette = {
+        "canvas": "#EEF3F9" if light_theme else "#050B16",
+        "surface": "#FFFFFF" if light_theme else "#0B1628",
+        "surface_soft": "#F6F8FC" if light_theme else "#101D31",
+        "input": "#F8FAFD" if light_theme else "#0D1A2D",
+        "text": "#122033" if light_theme else "#F5F8FC",
+        "muted": "#607089" if light_theme else "#9AACBF",
+        "border": "#D7E0EB" if light_theme else "#263750",
+        "shadow": "rgba(37, 54, 82, .18)" if light_theme else "rgba(0, 0, 0, .46)",
+    }
     st.html(
+        f"""
+        <style>
+            [data-testid="stApp"] {{
+                --auth-canvas: {palette["canvas"]};
+                --auth-surface: {palette["surface"]};
+                --auth-surface-soft: {palette["surface_soft"]};
+                --auth-input: {palette["input"]};
+                --auth-text: {palette["text"]};
+                --auth-muted: {palette["muted"]};
+                --auth-border: {palette["border"]};
+                --auth-shadow: {palette["shadow"]};
+                --auth-blue: #366DEF;
+                --auth-blue-strong: #2459D5;
+                --auth-green: #22C58B;
+                --auth-radius: 22px;
+            }}
+        </style>
         """
+        + r"""
         <style>
             *, *::before, *::after {
                 box-sizing: border-box;
@@ -143,8 +287,25 @@ def apply_auth_layout() -> None:
                 overscroll-behavior: none;
             }
 
+            [data-testid="stApp"],
+            [data-testid="stAppViewContainer"],
+            [data-testid="stMain"] {
+                background: var(--auth-canvas) !important;
+                color: var(--auth-text) !important;
+                transition: background-color 180ms ease, color 180ms ease;
+            }
+
             [data-testid="stHeader"] {
                 display: none;
+            }
+
+            [data-testid="stSidebar"],
+            [data-testid="stSidebarCollapsedControl"],
+            [data-testid="stSidebarCollapseButton"],
+            [data-testid="stSidebarNav"],
+            [data-testid="stNavigation"] {
+                display: none !important;
+                visibility: hidden !important;
             }
 
             [data-testid="stMainBlockContainer"] {
@@ -154,7 +315,7 @@ def apply_auth_layout() -> None:
                 min-height: 100dvh;
                 flex-direction: column;
                 justify-content: center;
-                padding: clamp(0.5rem, 2vw, 1rem) !important;
+                padding: clamp(1rem, 3vw, 2.5rem) !important;
             }
 
             [data-testid="stMainBlockContainer"]
@@ -164,16 +325,17 @@ def apply_auth_layout() -> None:
             }
 
             .st-key-auth_card {
-                width: min(72rem, calc(100% - 1.5rem));
+                width: min(74rem, calc(100% - 1rem));
                 max-width: 100%;
-                min-height: 38rem;
-                max-height: calc(100dvh - 1rem);
+                height: min(46rem, calc(100dvh - 2rem)) !important;
+                min-height: min(38rem, calc(100dvh - 2rem)) !important;
                 margin-inline: auto;
                 overflow: hidden;
-                border: 1px solid rgba(148, 163, 184, 0.24);
-                border-radius: 1.5rem;
-                background: #111c32;
-                box-shadow: 0 1.5rem 4rem rgba(2, 6, 23, 0.42);
+                border: 1px solid var(--auth-border);
+                border-radius: var(--auth-radius);
+                background: var(--auth-surface);
+                box-shadow: 0 1.75rem 5.5rem var(--auth-shadow);
+                animation: auth-card-in .62s cubic-bezier(.2,.78,.2,1) both;
             }
 
             .st-key-auth_card > [data-testid="stVerticalBlock"],
@@ -181,45 +343,38 @@ def apply_auth_layout() -> None:
             .st-key-auth_card [data-testid="stHorizontalBlock"] {
                 gap: 0 !important;
                 align-items: stretch;
+                height: 100%;
             }
 
             .st-key-auth_card [data-testid="stColumn"] {
                 min-width: 0 !important;
             }
 
+            .st-key-auth_card [data-testid="stColumn"]
+            > [data-testid="stVerticalBlock"]
+            > [data-testid="stLayoutWrapper"] {
+                height: 100%;
+            }
+
             .st-key-auth_welcome {
                 position: relative;
                 display: flex;
-                min-height: 38rem;
+                min-height: 100%;
                 height: 100%;
                 overflow: hidden;
                 padding: clamp(2rem, 4vw, 3.5rem);
-                background:
-                    radial-gradient(circle at 15% 15%, rgba(255,255,255,.18), transparent 22%),
-                    radial-gradient(circle at 85% 82%, rgba(34,211,238,.22), transparent 28%),
-                    linear-gradient(145deg, #2563eb 0%, #4338ca 52%, #6d28d9 100%);
-            }
-
-            .st-key-auth_welcome::after {
-                content: "";
-                position: absolute;
-                right: -5rem;
-                bottom: -6rem;
-                width: 18rem;
-                height: 18rem;
-                border: 1px solid rgba(255,255,255,.18);
-                border-radius: 50%;
-                box-shadow:
-                    0 0 0 2.5rem rgba(255,255,255,.035),
-                    0 0 0 5rem rgba(255,255,255,.025);
-                pointer-events: none;
+                background-image:
+                    linear-gradient(180deg, rgba(3, 10, 26, .18), rgba(2, 8, 20, .74)),
+                    url("app/static/revo-auth-visual.png");
+                background-position: center;
+                background-size: cover;
             }
 
             .st-key-auth_welcome > [data-testid="stVerticalBlock"] {
                 position: relative;
                 z-index: 1;
-                justify-content: center;
-                gap: 0.9rem;
+                justify-content: space-between;
+                gap: 1.2rem;
             }
 
             .st-key-auth_welcome h1,
@@ -229,62 +384,188 @@ def apply_auth_layout() -> None:
             }
 
             .st-key-auth_welcome h1 {
-                max-width: 28rem;
+                max-width: 25rem;
                 margin: 0;
-                font-size: clamp(2.75rem, 4.5vw, 4.75rem);
-                line-height: 1.03;
+                font-size: clamp(2.4rem, 4vw, 4rem);
+                line-height: 1.02;
                 letter-spacing: -0.04em;
             }
 
+            .auth-brand {
+                display: inline-flex;
+                width: fit-content;
+                align-items: center;
+                gap: .7rem;
+                color: #ffffff;
+                font-family: Manrope, Inter, sans-serif;
+                font-size: 1.22rem;
+                font-weight: 780;
+                letter-spacing: -.03em;
+            }
+
+            .auth-brand img {
+                width: 2.45rem;
+                height: 2.45rem;
+                object-fit: contain;
+                filter: drop-shadow(0 .45rem 1.1rem rgba(15, 118, 255, .24));
+            }
+
             .st-key-auth_welcome p {
-                max-width: 28rem;
+                max-width: 25rem;
                 margin: 0;
                 color: rgba(255,255,255,.86) !important;
-                font-size: 1.05rem;
-                line-height: 1.6;
+                font-size: 1rem;
+                line-height: 1.55;
+            }
+
+            .auth-kicker {
+                width: fit-content;
+                padding: .38rem .68rem;
+                border: 1px solid rgba(255,255,255,.24);
+                border-radius: 999px;
+                background: rgba(5, 15, 37, .36);
+                color: rgba(255,255,255,.9);
+                font-size: .71rem;
+                font-weight: 750;
+                letter-spacing: .09em;
+                text-transform: uppercase;
+                backdrop-filter: blur(14px);
+            }
+
+            .st-key-auth_story > [data-testid="stVerticalBlock"] {
+                gap: .8rem;
+            }
+
+            .st-key-auth_steps {
+                max-width: 24rem;
+                padding: .8rem;
+                border: 1px solid rgba(255,255,255,.18);
+                border-radius: 15px;
+                background: rgba(4, 12, 30, .44);
+                backdrop-filter: blur(18px) saturate(125%);
+            }
+
+            .st-key-auth_steps > [data-testid="stVerticalBlock"] {
+                gap: .22rem;
+            }
+
+            .st-key-auth_steps [data-testid="stCaptionContainer"] p {
+                color: rgba(255,255,255,.66) !important;
+                font-size: .7rem;
+                font-weight: 700;
+                letter-spacing: .08em;
+                text-transform: uppercase;
+            }
+
+            .st-key-auth_steps [data-testid="stMarkdownContainer"] p {
+                margin: 0;
+                padding: .58rem .7rem;
+                border-radius: 9px;
+                color: rgba(255,255,255,.78) !important;
+                font-size: .84rem;
+            }
+
+            .st-key-auth_steps [data-testid="stMarkdownContainer"] strong {
+                color: #ffffff !important;
             }
 
             .st-key-auth_form {
-                min-height: 38rem;
-                height: auto;
-                max-height: calc(100dvh - 1rem);
-                padding: clamp(1.75rem, 3.5vw, 3rem);
+                min-height: 100%;
+                height: 100%;
+                padding: clamp(1.8rem, 4vw, 3.6rem);
                 overflow-y: auto;
                 scrollbar-width: thin;
-                background: #111827;
+                background: var(--auth-surface);
+                color: var(--auth-text);
             }
 
             .st-key-auth_form > [data-testid="stVerticalBlock"] {
-                gap: 0.55rem;
+                min-height: 100%;
+                justify-content: center;
+                gap: 0.65rem;
+            }
+
+            .st-key-auth_form h1,
+            .st-key-auth_form h2,
+            .st-key-auth_form h3,
+            .st-key-auth_form p,
+            .st-key-auth_form label,
+            .st-key-auth_panel h1,
+            .st-key-auth_panel h2,
+            .st-key-auth_panel p,
+            .st-key-auth_panel label {
+                color: var(--auth-text) !important;
             }
 
             .st-key-auth_form h2,
-            .st-key-auth_form p {
+            .st-key-auth_form p,
+            .st-key-auth_panel p {
                 margin-block: 0;
             }
 
             .st-key-auth_form h2 {
-                font-size: clamp(2rem, 3vw, 2.65rem);
+                font-size: clamp(2rem, 3.2vw, 2.8rem);
+                line-height: 1.06;
+                letter-spacing: -.04em;
             }
 
-            .st-key-auth_form [data-testid="stTabs"] [role="tablist"] {
-                gap: 0.25rem;
+            .st-key-auth_form [data-testid="stCaptionContainer"] p,
+            .st-key-auth_panel [data-testid="stCaptionContainer"] p {
+                color: var(--auth-muted) !important;
             }
 
-            .st-key-auth_form [data-testid="stTabs"] [role="tab"] {
-                flex: 1;
+            .st-key-auth_toolbar > [data-testid="stHorizontalBlock"] {
+                align-items: center;
+                justify-content: flex-end;
+            }
+
+            .st-key-theme_light {
+                width: fit-content;
+                margin-left: auto;
+            }
+
+            .st-key-theme_light label p {
+                color: var(--auth-muted) !important;
+                font-size: .78rem;
+                font-weight: 650;
+            }
+
+            .st-key-auth_mode [data-testid="stSegmentedControl"] {
+                width: 100%;
+            }
+
+            .st-key-auth_mode [role="radiogroup"] {
+                width: 100%;
+                padding: .28rem;
+                border: 1px solid var(--auth-border);
+                border-radius: 11px;
+                background: var(--auth-surface-soft);
+            }
+
+            .st-key-auth_mode [role="radio"] {
+                flex: 1 1 50%;
                 justify-content: center;
-                white-space: nowrap;
+                min-height: 2.45rem;
+                border: 0 !important;
+                border-radius: 8px !important;
+                color: var(--auth-muted) !important;
+            }
+
+            .st-key-auth_mode [role="radio"][aria-checked="true"] {
+                background: var(--auth-surface) !important;
+                color: var(--auth-blue) !important;
+                box-shadow: 0 5px 14px var(--auth-shadow);
             }
 
             .st-key-auth_form [data-testid="stForm"] {
-                padding: 0.65rem 0 0.45rem;
+                padding: 0.45rem 0 0.2rem;
                 border: 0;
+                background: transparent !important;
             }
 
             .st-key-auth_form [data-testid="stForm"]
             > [data-testid="stVerticalBlock"] {
-                gap: 0.45rem;
+                gap: 0.55rem;
             }
 
             .st-key-auth_form [data-testid="stTextInput"] label,
@@ -292,29 +573,122 @@ def apply_auth_layout() -> None:
                 margin-bottom: 0.1rem;
             }
 
+            .st-key-auth_form [data-baseweb="input"],
+            .st-key-auth_panel [data-baseweb="input"] {
+                min-height: 2.85rem;
+                border-color: var(--auth-border) !important;
+                border-radius: 9px !important;
+                background: var(--auth-input) !important;
+                box-shadow: none !important;
+            }
+
+            .st-key-auth_form input,
+            .st-key-auth_panel input {
+                color: var(--auth-text) !important;
+                caret-color: var(--auth-blue) !important;
+            }
+
+            .st-key-auth_form input::placeholder,
+            .st-key-auth_panel input::placeholder {
+                color: var(--auth-muted) !important;
+                opacity: .72;
+            }
+
+            .st-key-auth_form [data-baseweb="input"]:focus-within,
+            .st-key-auth_panel [data-baseweb="input"]:focus-within {
+                border-color: var(--auth-blue) !important;
+                box-shadow: 0 0 0 3px rgba(54,109,239,.14) !important;
+            }
+
+            .st-key-auth_form .stButton button,
+            .st-key-auth_form [data-testid="stFormSubmitButton"] button,
+            .st-key-auth_panel .stButton button,
+            .st-key-auth_panel [data-testid="stFormSubmitButton"] button {
+                min-height: 2.85rem;
+                border-radius: 9px !important;
+                font-weight: 700;
+                transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
+            }
+
+            .st-key-auth_form [data-testid="stFormSubmitButton"] button,
+            .st-key-auth_panel [data-testid="stFormSubmitButton"] button {
+                border-color: var(--auth-blue) !important;
+                background: var(--auth-blue) !important;
+                color: #ffffff !important;
+                box-shadow: 0 10px 24px rgba(54,109,239,.22);
+            }
+
+            .st-key-auth_form [data-testid="stFormSubmitButton"] button p,
+            .st-key-auth_panel [data-testid="stFormSubmitButton"] button p {
+                color: #ffffff !important;
+            }
+
+            .st-key-auth_form .stButton button:hover,
+            .st-key-auth_form [data-testid="stFormSubmitButton"] button:hover,
+            .st-key-auth_panel .stButton button:hover,
+            .st-key-auth_panel [data-testid="stFormSubmitButton"] button:hover {
+                transform: translateY(-1px);
+            }
+
+            .st-key-auth_forgot button {
+                border-color: transparent !important;
+                background: transparent !important;
+                color: var(--auth-blue) !important;
+                box-shadow: none !important;
+            }
+
+            .st-key-auth_forgot button:hover {
+                border-color: var(--auth-border) !important;
+                background: var(--auth-surface-soft) !important;
+            }
+
+            .st-key-auth_form [data-testid="stAlert"],
+            .st-key-auth_panel [data-testid="stAlert"] {
+                border-radius: 9px !important;
+            }
+
             .st-key-auth_panel {
-                width: min(31rem, calc(100% - 0.5rem));
-                max-height: calc(100dvh - 1rem);
+                width: min(34rem, calc(100% - 1rem));
+                max-height: calc(100dvh - 2rem);
                 margin-inline: auto;
                 padding: clamp(1.25rem, 3vw, 2.25rem);
                 overflow-y: auto;
-                border: 1px solid rgba(148, 163, 184, 0.24);
-                border-radius: 1.5rem;
-                background: #111827;
-                box-shadow: 0 1.5rem 4rem rgba(2, 6, 23, 0.42);
+                border: 1px solid var(--auth-border);
+                border-radius: var(--auth-radius);
+                background: var(--auth-surface);
+                box-shadow: 0 1.75rem 5.5rem var(--auth-shadow);
             }
 
             .st-key-auth_panel > [data-testid="stVerticalBlock"] {
                 gap: 0.55rem;
             }
 
-            @media (max-width: 760px) {
+            [role="dialog"] {
+                border-color: var(--auth-border) !important;
+                background: var(--auth-surface) !important;
+                color: var(--auth-text) !important;
+            }
+
+            [role="dialog"] h1,
+            [role="dialog"] h2,
+            [role="dialog"] h3,
+            [role="dialog"] p,
+            [role="dialog"] label {
+                color: var(--auth-text) !important;
+            }
+
+            @keyframes auth-card-in {
+                from { opacity: 0; transform: translateY(18px) scale(.985); }
+                to { opacity: 1; transform: translateY(0) scale(1); }
+            }
+
+            @media (max-width: 820px) {
                 [data-testid="stMainBlockContainer"] {
                     justify-content: center;
                     padding:
-                        calc(.85rem + env(safe-area-inset-top, 0px))
+                        calc(.65rem + env(safe-area-inset-top, 0px))
                         .75rem
-                        .85rem !important;
+                        calc(.65rem + env(safe-area-inset-bottom, 0px)) !important;
                 }
 
                 [data-testid="stMainBlockContainer"]
@@ -323,39 +697,90 @@ def apply_auth_layout() -> None:
                 }
 
                 .st-key-auth_card {
-                    width: min(32rem, calc(100% - 0.25rem));
+                    width: min(100%, 35rem);
                     min-height: 0;
-                    max-height:
-                        calc(100dvh - 1.7rem - env(safe-area-inset-top, 0px));
+                    height: auto;
+                    max-height: calc(100dvh - 1.3rem - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
                     margin-block: auto;
+                    overflow-y: auto;
                 }
 
-                .st-key-auth_card [data-testid="stHorizontalBlock"]
-                > [data-testid="stColumn"]:first-child {
-                    display: none;
+                .st-key-auth_card [data-testid="stHorizontalBlock"]:has(.st-key-auth_form) {
+                    display: block !important;
+                    height: auto;
                 }
 
-                .st-key-auth_card [data-testid="stHorizontalBlock"]
-                > [data-testid="stColumn"]:last-child {
+                .st-key-auth_card [data-testid="stColumn"]:has(.st-key-auth_welcome),
+                .st-key-auth_card [data-testid="stColumn"]:has(.st-key-auth_form) {
                     width: 100% !important;
+                    max-width: none !important;
+                    min-width: 0 !important;
                     flex: 1 1 100% !important;
                 }
 
+                .st-key-auth_welcome {
+                    min-height: 7.7rem;
+                    height: 7.7rem;
+                    padding: 1.15rem 1.25rem;
+                    background-position: 50% 35%;
+                }
+
+                .st-key-auth_welcome > [data-testid="stVerticalBlock"] {
+                    justify-content: center;
+                }
+
+                .st-key-auth_story,
+                .st-key-auth_steps {
+                    display: none !important;
+                }
+
+                .st-key-auth_welcome h3 {
+                    margin: 0;
+                    font-size: 1.16rem;
+                }
+
                 .st-key-auth_form {
-                    height: auto;
+                    height: auto !important;
                     min-height: auto;
-                    max-height:
-                        calc(100dvh - 1.7rem - env(safe-area-inset-top, 0px));
-                    padding: 1.25rem;
+                    overflow: visible;
+                    padding: 1.25rem 1.2rem 1.4rem;
                 }
 
                 .st-key-auth_form [data-testid="stTextInput"] input,
                 .st-key-auth_panel [data-testid="stTextInput"] input {
                     font-size: 16px !important;
                 }
+
+                .st-key-auth_form h2 {
+                    font-size: clamp(1.8rem, 8vw, 2.25rem);
+                }
+
+                .st-key-auth_form [data-testid="stHorizontalBlock"]:has(.st-key-signup_email) {
+                    display: block !important;
+                }
+
+                .st-key-auth_form [data-testid="stHorizontalBlock"]:has(.st-key-signup_email)
+                > [data-testid="stColumn"] {
+                    width: 100% !important;
+                    max-width: none !important;
+                    min-width: 0 !important;
+                    margin-bottom: .45rem;
+                }
+
+                .st-key-auth_mode [role="radio"] {
+                    min-height: 2.35rem;
+                }
             }
 
             @media (max-height: 720px) {
+                .st-key-auth_card {
+                    height: calc(100dvh - 1rem) !important;
+                }
+
+                .st-key-auth_welcome {
+                    padding-block: 1.6rem;
+                }
+
                 .st-key-auth_form {
                     padding-top: 1rem;
                     padding-bottom: 1rem;
@@ -365,6 +790,15 @@ def apply_auth_layout() -> None:
                     gap: 0.35rem;
                 }
             }
+
+            @media (prefers-reduced-motion: reduce) {
+                .st-key-auth_card,
+                .st-key-auth_form .stButton button,
+                .st-key-auth_form [data-testid="stFormSubmitButton"] button {
+                    animation: none !important;
+                    transition: none !important;
+                }
+            }
         </style>
         """
     )
@@ -372,15 +806,17 @@ def apply_auth_layout() -> None:
 
 def apply_main_layout() -> None:
     """Harmoniza diálogos e identidade da conta após a autenticação."""
+    inject_app_styles()
+    return
     st.html(
         """
         <style>
             [data-testid="stApp"] {
-                --finscope-glass-border: rgba(148, 163, 184, .20);
-                --finscope-glass-bg:
+                --revo-glass-border: rgba(148, 163, 184, .20);
+                --revo-glass-bg:
                     linear-gradient(145deg, rgba(51, 65, 85, .56), rgba(15, 23, 42, .34)),
                     rgba(15, 23, 42, .36);
-                --finscope-glass-shadow:
+                --revo-glass-shadow:
                     inset 0 1px 0 rgba(255, 255, 255, .08),
                     0 .9rem 2.5rem rgba(2, 6, 23, .16);
             }
@@ -426,10 +862,10 @@ def apply_main_layout() -> None:
             [data-testid="stMain"] [data-testid="stExpander"],
             [data-testid="stMain"] [role="tabpanel"],
             [data-testid="stMain"] [data-testid="stChatMessage"] {
-                border: 1px solid var(--finscope-glass-border) !important;
+                border: 1px solid var(--revo-glass-border) !important;
                 border-radius: 1.2rem !important;
-                background: var(--finscope-glass-bg) !important;
-                box-shadow: var(--finscope-glass-shadow);
+                background: var(--revo-glass-bg) !important;
+                box-shadow: var(--revo-glass-shadow);
                 -webkit-backdrop-filter: blur(22px) saturate(145%);
                 backdrop-filter: blur(22px) saturate(145%);
             }
@@ -560,7 +996,7 @@ def apply_main_layout() -> None:
                 background: rgba(15, 23, 42, .42);
             }
 
-            .finscope-user-card {
+            .revo-user-card {
                 margin: .35rem 0 .9rem;
                 padding: .9rem 1rem;
                 overflow: hidden;
@@ -574,7 +1010,7 @@ def apply_main_layout() -> None:
                 backdrop-filter: blur(18px) saturate(140%);
             }
 
-            .finscope-user-label {
+            .revo-user-label {
                 display: block;
                 margin-bottom: .18rem;
                 color: rgba(203, 213, 225, .68);
@@ -584,7 +1020,7 @@ def apply_main_layout() -> None:
                 text-transform: uppercase;
             }
 
-            .finscope-user-name {
+            .revo-user-name {
                 display: block;
                 overflow-wrap: anywhere;
                 background: linear-gradient(105deg, #047857 0%, #10b981 48%, #86efac 100%);
@@ -690,6 +1126,7 @@ def apply_main_layout() -> None:
         </style>
         """
     )
+    inject_app_styles()
 
 
 def show_delivery(result: DeliveryResult) -> None:
@@ -721,7 +1158,7 @@ def initialize_database_or_stop() -> None:
                 text_alignment="center",
             )
             st.error(
-                "O FinScope não conseguiu validar a conexão segura com o PostgreSQL.",
+                "O Revo não conseguiu validar a conexão segura com o PostgreSQL.",
                 icon=":material/database_off:",
             )
             st.write(
@@ -798,41 +1235,105 @@ def reset_password_screen(raw_token: str) -> None:
 
 
 def login_screen() -> None:
-    """Apresenta login e cadastro em um cartão dividido e responsivo."""
+    """Apresenta login e cadastro em uma experiência dividida e responsiva."""
     apply_auth_layout()
+    # Mudanças de widgets vinculados ao Session State precisam acontecer antes
+    # de o widget ser instanciado nesta execução. O cadastro agenda a troca de
+    # aba e o próximo rerun a aplica aqui, antes do segmented_control.
+    pending_auth_mode = st.session_state.pop("auth_mode_pending", None)
+    if pending_auth_mode in {"login", "signup"}:
+        st.session_state.auth_mode = pending_auth_mode
+        st.session_state.auth_mode_display = pending_auth_mode
+    try:
+        browser_theme_type = st.context.theme.type
+    except (AttributeError, RuntimeError):
+        browser_theme_type = "light" if st.session_state.theme_light else "dark"
+    sync_browser_theme(
+        key="revo_auth_theme_sync_instance",
+        data={
+            "light": bool(st.session_state.theme_light),
+            "current": browser_theme_type,
+            "paths": ["/"],
+        },
+    )
+    current_mode = st.session_state.get(
+        "auth_mode_display", st.session_state.get("auth_mode", "login")
+    )
+    is_signup = current_mode == "signup"
     with st.container(key="auth_card"):
         welcome_column, form_column = st.columns([1.08, 1], gap=None)
         with welcome_column:
             with st.container(key="auth_welcome"):
-                st.markdown("### :material/account_balance_wallet: FinScope")
-                st.title("Bem-vindo(a)!")
-                st.write(
-                    "Este é o seu aplicativo de finanças, feito para organizar "
-                    "sua rotina e seus investimentos!"
+                st.html(
+                    '<div class="auth-brand"><img src="app/static/revo-logo.png" '
+                    'alt="Logo Revo"><span>Revo</span></div>'
                 )
-                with st.container(horizontal=True):
-                    st.badge(
-                        "Finanças pessoais",
-                        icon=":material/receipt_long:",
-                        color="blue",
+                with st.container(key="auth_story"):
+                    st.html('<div class="auth-kicker">Sua vida financeira, mais clara</div>')
+                    st.title(
+                        "Comece sua jornada financeira"
+                        if is_signup
+                        else "Bem-vindo de volta"
                     )
-                    st.badge(
-                        "Investimentos",
-                        icon=":material/trending_up:",
-                        color="green",
+                    st.write(
+                        "Crie seu espaço seguro, registre sua rotina e acompanhe "
+                        "sua evolução em um só lugar."
+                        if is_signup
+                        else "Retome sua visão financeira com organização, "
+                        "privacidade e decisões mais conscientes."
                     )
-                st.caption("Beta fechada para até 10 participantes.")
+                with st.container(key="auth_steps"):
+                    st.caption("Seu caminho no Revo")
+                    if is_signup:
+                        st.markdown(":material/person_add: **1. Crie sua conta**")
+                        st.markdown(":material/account_balance_wallet: 2. Organize sua rotina")
+                        st.markdown(":material/monitoring: 3. Acompanhe sua evolução")
+                    else:
+                        st.markdown(":material/login: **1. Entre com segurança**")
+                        st.markdown(":material/dashboard: 2. Consulte seu panorama")
+                        st.markdown(":material/insights: 3. Decida com clareza")
         with form_column:
             with st.container(key="auth_form"):
-                st.markdown("## Acesse sua conta")
-                st.caption("Entre ou crie uma conta para continuar.")
+                with st.container(
+                    key="auth_toolbar",
+                    horizontal=True,
+                    horizontal_alignment="right",
+                ):
+                    st.toggle(
+                        "Modo claro",
+                        key="theme_light",
+                        help="Alterna a tela de acesso entre os temas claro e escuro.",
+                    )
+                st.caption("ACESSO SEGURO · BETA 5.2")
+                st.markdown(
+                    "## Crie sua conta" if is_signup else "## Entre no Revo"
+                )
+                st.caption(
+                    "Preencha seus dados para participar da beta fechada."
+                    if is_signup
+                    else "Acesse sua conta para continuar de onde parou."
+                )
                 flash = st.session_state.pop("flash", None)
                 if flash:
                     (st.success if flash[0] == "success" else st.error)(flash[1])
-                enter, signup = st.tabs(
-                    [":material/login: Entrar", ":material/person_add: Criar conta"]
+                auth_mode = st.segmented_control(
+                    "Tipo de acesso",
+                    options=["login", "signup"],
+                    default="login",
+                    format_func=lambda option: (
+                        ":material/login: Entrar"
+                        if option == "login"
+                        else ":material/person_add: Criar conta"
+                    ),
+                    key="auth_mode",
+                    required=True,
+                    label_visibility="collapsed",
+                    width="stretch",
+                    on_change=lambda: st.session_state.update(
+                        auth_mode_display=st.session_state.auth_mode
+                    ),
                 )
-                with enter:
+                if auth_mode == "login":
                     with st.form("login_form"):
                         email = st.text_input(
                             "E-mail",
@@ -861,22 +1362,23 @@ def login_screen() -> None:
                         "Esqueceu sua senha?",
                         icon=":material/lock_reset:",
                         width="stretch",
+                        key="auth_forgot",
                     ):
                         forgot_password()
-                    st.caption(
-                        "Primeiro acesso? Selecione **Criar conta** acima."
-                    )
-                with signup:
+                else:
                     with st.form("signup_form"):
-                        name = st.text_input(
-                            "Como podemos chamar você?",
-                            placeholder="Seu nome",
-                        )
-                        new_email = st.text_input(
-                            "E-mail",
-                            placeholder="voce@exemplo.com",
-                            key="signup_email",
-                        )
+                        name_column, email_column = st.columns(2, gap="small")
+                        with name_column:
+                            name = st.text_input(
+                                "Seu nome",
+                                placeholder="Como podemos chamar você?",
+                            )
+                        with email_column:
+                            new_email = st.text_input(
+                                "E-mail",
+                                placeholder="voce@exemplo.com",
+                                key="signup_email",
+                            )
                         invite_code = st.text_input(
                             "Código de convite",
                             type="password",
@@ -890,6 +1392,9 @@ def login_screen() -> None:
                                 "Use 10 ou mais caracteres, com maiúscula, "
                                 "minúscula e número."
                             ),
+                        )
+                        st.caption(
+                            "Use 10 ou mais caracteres, com maiúscula, minúscula e número."
                         )
                         confirm = st.text_input(
                             "Confirme a senha",
@@ -919,6 +1424,7 @@ def login_screen() -> None:
                             )
                             if ok:
                                 st.session_state.flash = ("success", message)
+                                st.session_state.auth_mode_pending = "login"
                                 st.rerun()
                             else:
                                 st.error(message)
@@ -980,27 +1486,28 @@ if not user:
     st.rerun()
 st.session_state.user = user
 apply_main_layout()
+try:
+    browser_theme_type = st.context.theme.type
+except (AttributeError, RuntimeError):
+    browser_theme_type = "light" if st.session_state.theme_light else "dark"
+sync_browser_theme(
+    key="revo_browser_theme_sync_instance",
+    data={
+        "light": bool(st.session_state.theme_light),
+        "current": browser_theme_type,
+        "paths": [
+            "/",
+            "/home",
+            "/dashboard",
+            "/personal_finance",
+            "/planning",
+            "/investments",
+            "/assistant",
+            "/settings",
+        ],
+    },
+)
 mobile_navigation_gesture(key="mobile_navigation_gesture")
-with st.sidebar:
-    st.markdown("### :material/account_balance_wallet: FinScope")
-    safe_user_name = escape(str(user["name"]))
-    st.html(
-        f"""
-        <div class="finscope-user-card">
-            <span class="finscope-user-label">Conectado como</span>
-            <strong class="finscope-user-name">{safe_user_name}</strong>
-        </div>
-        """
-    )
-    st.badge("Beta 5.2", icon=":material/science:", color="blue")
-    if st.button("Enviar feedback", icon=":material/rate_review:", width="stretch"):
-        feedback_dialog()
-    if st.button("Sair da conta", icon=":material/logout:", width="stretch"):
-        st.session_state.user = None
-        st.session_state.help_messages = []
-        st.rerun()
-    st.caption("Seus dados são separados por conta.")
-
 dashboard_title = "Minha dashboard" if get_dashboard(user["id"]) else "Criar minha dashboard"
 
 home_page = st.Page("app_pages/home.py", title="Início", icon=":material/home:")
@@ -1024,10 +1531,48 @@ help_page = st.Page(
 settings_page = st.Page(
     "app_pages/settings.py", title="Minha conta", icon=":material/manage_accounts:"
 )
-pages = {
-    "": [home_page, dashboard_page, investments_page],
-    "Organizar": [finance_page, planning_page],
-    "Suporte": [help_page, settings_page],
-}
-page = st.navigation(pages, position="top")
+page = st.navigation(
+    [home_page, dashboard_page, finance_page, planning_page, investments_page, help_page, settings_page],
+    position="hidden",
+)
+
+with st.sidebar:
+    st.html(
+        '<div class="revo-brand"><img src="app/static/revo-logo.png" '
+        'alt="Logo Revo"><span>Revo</span></div>'
+    )
+    st.page_link(home_page, label="Início", icon=":material/home:")
+    st.page_link(dashboard_page, label=dashboard_title, icon=":material/dashboard:")
+    st.html('<div class="fs-nav-section">Organizar</div>')
+    st.page_link(finance_page, label="Finanças", icon=":material/account_balance_wallet:")
+    st.page_link(planning_page, label="Planejamento", icon=":material/event_note:")
+    st.page_link(investments_page, label="Investimentos", icon=":material/query_stats:")
+    st.html('<div class="fs-nav-section">Conta</div>')
+    st.page_link(help_page, label="Ajuda", icon=":material/help_center:")
+    st.page_link(settings_page, label="Minha conta", icon=":material/manage_accounts:")
+
+    with st.container(key="sidebar_account"):
+        safe_user_name = escape(str(user["name"]))
+        st.html(
+            f"""
+            <div class="revo-user-card">
+                <span class="revo-user-label">Conectado como</span>
+                <strong class="revo-user-name">{safe_user_name}</strong>
+            </div>
+            """
+        )
+        st.badge("Beta 5.2", icon=":material/science:", color="blue")
+        st.toggle(
+            "Modo claro",
+            key="theme_light",
+            help="Alterna toda a interface entre os temas claro e escuro.",
+        )
+        if st.button("Enviar feedback", icon=":material/rate_review:", width="stretch"):
+            feedback_dialog()
+        if st.button("Sair da conta", icon=":material/logout:", width="stretch"):
+            st.session_state.clear()
+            st.session_state.flash = ("success", "Sessão encerrada com segurança.")
+            st.rerun()
+        st.caption("Seus dados são separados por conta.")
+
 page.run()

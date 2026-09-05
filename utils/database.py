@@ -1,4 +1,4 @@
-"""Camada de persistência do FinScope (SQLite local ou PostgreSQL)."""
+"""Camada de persistência do Revo (SQLite local ou PostgreSQL)."""
 
 from __future__ import annotations
 
@@ -334,8 +334,13 @@ def _set_rls_context(session: Session, user_id: int) -> None:
     if safe_user_id <= 0:
         raise PermissionError("Contexto de conta inválido.")
     if session.bind is not None and session.bind.dialect.name == "postgresql":
+        # O primeiro marcador preserva as politicas existentes no Neon. O segundo
+        # permite uma migracao futura da nomenclatura sem interromper acessos.
         session.execute(
             select(func.set_config("finscope.user_id", str(safe_user_id), True))
+        )
+        session.execute(
+            select(func.set_config("revo.user_id", str(safe_user_id), True))
         )
 
 
@@ -345,6 +350,8 @@ def _configure_postgres_security(connection) -> None:
     if runtime_role and not _ROLE_NAME.fullmatch(runtime_role):
         raise RuntimeError("APP_DATABASE_ROLE possui formato inválido.")
 
+    # Politicas novas usam o marcador compativel com o banco ja publicado. A
+    # aplicacao configura os dois namespaces durante a transicao de marca.
     predicate = (
         "(user_id = NULLIF(current_setting('finscope.user_id', true), '')::INTEGER)"
     )
@@ -443,7 +450,7 @@ def _assert_runtime_postgres_security(connection) -> None:
 
 def _database_url() -> str:
     """Retorna a URL do banco configurado ou o SQLite local de contingência."""
-    fallback = (Path(__file__).resolve().parents[1] / "finscope.db").as_posix()
+    fallback = (Path(__file__).resolve().parents[1] / "revo.db").as_posix()
     configured = os.getenv("DATABASE_URL", f"sqlite:///{fallback}")
     if configured.startswith("postgres://"):
         return configured.replace("postgres://", "postgresql+psycopg://", 1)
@@ -636,7 +643,7 @@ def create_user(
             )
         )
         session.commit()
-    return True, "Conta criada. Você já pode entrar no FinScope."
+    return True, "Conta criada. Você já pode entrar no Revo."
 
 
 def authenticate(email: str, password: str) -> dict | None:

@@ -1,4 +1,4 @@
-"""Respostas locais da Central de Ajuda do FinScope.
+"""Respostas locais da Central de Ajuda do Revo.
 
 O módulo não utiliza inteligência artificial, serviços externos ou dados
 financeiros da conta. A resposta é escolhida por regras simples e auditáveis.
@@ -61,7 +61,7 @@ HELP_TOPICS: tuple[tuple[frozenset[str], str], ...] = (
     (
         frozenset({"orcamento", "limite", "categoria", "planejamento"}),
         "Acesse **Planejamento > Orçamentos** para definir um limite mensal por "
-        "categoria. O FinScope compara esse valor com as despesas do mês e avisa "
+        "categoria. O Revo compara esse valor com as despesas do mês e avisa "
         "quando o limite é excedido.",
     ),
     (
@@ -173,7 +173,7 @@ def answer_help_question(question: str) -> str:
     greeting_words = {"oi", "ola", "bom", "boa", "dia", "tarde", "noite"}
     if words.issubset(greeting_words):
         return (
-            "Olá! Sou a Central de Ajuda do FinScope. "
+            "Olá! Sou a Central de Ajuda do Revo. "
             + FALLBACK_RESPONSE
         )
 

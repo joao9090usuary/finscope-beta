@@ -17,13 +17,17 @@ import yfinance as yf
 _CACHE_DIR = Path(
     os.getenv(
         "YFINANCE_CACHE_DIR",
-        Path(tempfile.gettempdir()) / "finscope-yfinance",
+        Path(tempfile.gettempdir()) / "revo-yfinance",
     )
 )
 _CACHE_DIR.mkdir(parents=True, exist_ok=True)
 yf.set_tz_cache_location(str(_CACHE_DIR))
 
 VALID_PERIODS = {"1mo", "3mo", "5d", "6mo", "1y", "2y"}
+DEMO_SYMBOLS = {
+    "ABEV3", "BBAS3", "BBDC4", "BOVA11", "HGLG11", "ITSA4", "ITUB4",
+    "MGLU3", "PETR3", "PETR4", "TAEE11", "VALE3", "WEGE3", "^BVSP",
+}
 # Códigos à vista mais comuns da B3 têm quatro caracteres de base e um ou
 # dois algarismos finais. O índice Ibovespa é consultado como ^BVSP.
 TICKER_PATTERN = re.compile(r"^(?:[A-Z0-9]{4}\d{1,2}|\^BVSP)$")
@@ -44,7 +48,7 @@ def normalize_ticker(ticker: str) -> str:
 
 def _brapi_json(endpoint: str, params: dict[str, str]) -> dict[str, Any]:
     base_url = os.getenv("BRAPI_BASE_URL", "https://brapi.dev/api").rstrip("/")
-    headers = {"Accept": "application/json", "User-Agent": "FinScope/1.0"}
+    headers = {"Accept": "application/json", "User-Agent": "Revo/1.0"}
     if token := os.getenv("BRAPI_TOKEN", "").strip():
         headers["Authorization"] = f"Bearer {token}"
     try:
@@ -175,6 +179,14 @@ def prices(ticker: str, period: str = "6mo") -> pd.DataFrame:
                 False,
             )
         except MarketDataError:
+            # A demonstração serve somente para exemplos conhecidos. Gerar
+            # números para qualquer texto com formato de ticker faria um ativo
+            # inexistente parecer legítimo quando as fontes externas caíssem.
+            if symbol not in DEMO_SYMBOLS:
+                raise MarketDataError(
+                    "Não foi possível confirmar este ativo nas fontes de mercado. "
+                    "Revise o código e tente novamente quando houver conexão."
+                )
             return _indicators(_demo_history(symbol, period), "Demonstração local", True)
 
 

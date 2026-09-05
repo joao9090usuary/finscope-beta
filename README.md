@@ -1,4 +1,4 @@
-# FinScope — Beta 5.2
+# Revo — Beta 5.2
 
 Aplicação financeira desenvolvida em Python e Streamlit para controle de
 finanças pessoais, análise técnica de ações da B3 e acompanhamento de um
@@ -82,7 +82,7 @@ respectivos serviços.
 
 ### 1. Criar o arquivo de configuração
 
-No PowerShell, entre na pasta `FinScope-Beta-v5.1` e execute:
+No PowerShell, entre na pasta `Revo-Beta-v5.1` e execute:
 
 ```powershell
 Copy-Item .env.example .env
@@ -102,7 +102,8 @@ docker compose ps
 
 Ao reutilizar um volume de uma versão anterior, o serviço
 `database_password_sync` atualiza a credencial de migração e prepara o papel
-restrito `finscope_app`. Em seguida, `database_migrate` aplica o esquema e a RLS
+restrito `finscope_app` (identificador interno legado mantido para preservar o
+banco existente). Em seguida, `database_migrate` aplica o esquema e a RLS
 antes de liberar a aplicação. Nenhuma conta ou movimentação é apagada.
 
 ### 3. Abrir a aplicação
@@ -186,7 +187,7 @@ local da Central de Ajuda.
 ## Estrutura do projeto
 
 ```text
-FinScope-Beta-v5.1/
+Revo-Beta-v5.1/
 ├── app_pages/                 # Páginas da interface
 ├── jobs/                      # Tarefas agendáveis
 ├── static/                    # Manifesto e ícone instalável

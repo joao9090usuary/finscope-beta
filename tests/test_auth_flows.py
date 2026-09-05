@@ -122,12 +122,12 @@ class AuthFlowTest(unittest.TestCase):
             os.environ,
             {
                 "BREVO_API_KEY": "chave-brevo-de-teste",
-                "EMAIL_FROM": "FinScope <responsavel@example.com>",
+                "EMAIL_FROM": "Revo <responsavel@example.com>",
             },
         ):
             _send_brevo_api(
                 "participante@example.com",
-                "Teste do FinScope",
+                "Teste do Revo",
                 "Mensagem transacional de teste.",
             )
 

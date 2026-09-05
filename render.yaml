@@ -1,5 +1,7 @@
 services:
   - type: web
+    # Mantido para atualizar o servico existente sem criar uma segunda instancia.
+    # A marca exibida pela aplicacao e Revo.
     name: finscope-beta
     runtime: docker
     plan: free

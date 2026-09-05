@@ -9,6 +9,7 @@ import streamlit as st
 from utils.database import delete_holding, holdings_frame, save_holding
 from utils.finance import MarketDataError, latest_price, normalize_ticker, prices, quote
 from utils.formatting import format_brl, format_decimal, format_percent
+from utils.ui import chart_theme, metric_card_grid, page_header
 
 
 LOGGER = logging.getLogger(__name__)
@@ -50,10 +51,11 @@ def add_position(ticker: str, current: float) -> None:
         st.toast("Posição salva!", icon=":material/check_circle:")
         st.rerun()
 
-st.title("Investimentos")
-st.write(
-    "Pesquise ativos da B3, compreenda os indicadores e acompanhe seu "
-    "portfólio virtual."
+page_header(
+    "Investimentos",
+    "Pesquise ativos da B3, compreenda os indicadores e acompanhe seu portfólio virtual.",
+    eyebrow="Mercado e portfólio",
+    meta="Dados informativos · não é recomendação",
 )
 with st.expander("Guia rápido dos indicadores", icon=":material/school:"):
     st.markdown(
@@ -66,18 +68,19 @@ with st.expander("Guia rápido dos indicadores", icon=":material/school:"):
         "constituem recomendação de investimento."
     )
 
-with st.form("ticker_search", border=False):
-    with st.container(horizontal=True, vertical_alignment="bottom"):
-        ticker_input = st.text_input(
-            "Código de negociação da B3",
-            value=st.session_state.investment_ticker,
-            placeholder="Ex.: PETR4",
-            help="Informe um código negociado na B3, como PETR4 ou BOVA11.",
-            max_chars=6,
-            key="ticker_input",
-        )
-        period_label = st.selectbox("Período", list(PERIOD_OPTIONS), index=2)
-        searched = st.form_submit_button("Analisar", type="primary", icon=":material/search:")
+with st.container(key="investments_toolbar"):
+    with st.form("ticker_search", border=False):
+        with st.container(horizontal=True, vertical_alignment="bottom"):
+            ticker_input = st.text_input(
+                "Código de negociação da B3",
+                value=st.session_state.investment_ticker,
+                placeholder="Ex.: PETR4",
+                help="Informe um código negociado na B3, como PETR4 ou BOVA11.",
+                max_chars=6,
+                key="ticker_input",
+            )
+            period_label = st.selectbox("Período", list(PERIOD_OPTIONS), index=2)
+            searched = st.form_submit_button("Analisar", type="primary", icon=":material/search:")
 if searched:
     try:
         cleaned = normalize_ticker(ticker_input)
@@ -133,29 +136,14 @@ try:
             f"Última atualização informada pela fonte: "
             f"{updated:%d/%m/%Y às %H:%M} (horário de Brasília)."
         )
-    metric_columns = st.columns(4, gap="medium")
-    with metric_columns[0]:
-        st.metric(
-            ticker,
-            format_brl(last),
-            format_percent(change, 2),
-            border=True,
-            chart_data=data["Close"].tail(20).tolist(),
-        )
-    with metric_columns[1]:
-        st.metric(
-            "RSI (14)",
-            format_decimal(rsi, 1) if pd.notna(rsi) else "—",
-            border=True,
-        )
-    with metric_columns[2]:
-        st.metric("MACD", format_decimal(macd, 3), border=True)
-    with metric_columns[3]:
-        st.metric(
-            "Volume",
-            f"{format_decimal(float(snapshot['volume']) / 1e6, 1)} mi",
-            border=True,
-        )
+    metric_card_grid(
+        [
+            {"label": ticker, "value": format_brl(last), "delta": format_percent(change, 2), "icon": "show_chart", "tone": "blue", "delta_tone": "positive" if change >= 0 else "negative"},
+            {"label": "RSI (14)", "value": format_decimal(rsi, 1) if pd.notna(rsi) else "—", "delta": "Força relativa", "icon": "speed", "tone": "cyan"},
+            {"label": "MACD", "value": format_decimal(macd, 3), "delta": "Tendência", "icon": "ssid_chart", "tone": "violet"},
+            {"label": "Volume", "value": f"{format_decimal(float(snapshot['volume']) / 1e6, 1)} mi", "delta": "Negociação informada", "icon": "bar_chart", "tone": "green"},
+        ]
+    )
     if st.button(
         "Adicionar este ativo ao meu portfólio",
         icon=":material/add_chart:",
@@ -188,7 +176,7 @@ try:
                 "Série:N",
                 scale=alt.Scale(
                     domain=["Fechamento", "MM20", "MM50"],
-                    range=["#60A5FA", "#FBBF24", "#A78BFA"],
+                    range=["#60A5FA", "#FBBF24", "#8176FF"],
                 ),
             ),
             tooltip=[
@@ -198,22 +186,24 @@ try:
             ],
         )
     )
+    theme = chart_theme()
     chart = (
         alt.layer(price_area, trend_lines)
         .properties(height=380)
         .interactive(bind_y=False)
+        .configure(background=theme["surface"])
         .configure_view(strokeOpacity=0)
         .configure_axis(
-            gridColor="#334155",
+            gridColor=theme["grid"],
             gridOpacity=0.28,
-            labelColor="#CBD5E1",
-            titleColor="#94A3B8",
+            labelColor=theme["muted"],
+            titleColor=theme["muted"],
         )
-        .configure_legend(labelColor="#CBD5E1", orient="top")
+        .configure_legend(labelColor=theme["muted"], orient="top")
     )
     with st.container(border=True):
         st.subheader("Preço e médias móveis", anchor=False)
-        st.altair_chart(chart, key="price_moving_averages_chart")
+        st.altair_chart(chart, key="price_moving_averages_chart", theme=None)
     a, b = st.columns(2)
     with a.container(border=True):
         st.subheader("RSI", anchor=False)

@@ -1,4 +1,4 @@
-# Checklist para a beta fechada do FinScope
+# Checklist para a beta fechada do Revo
 
 ## Obrigatório antes de convidar usuários
 

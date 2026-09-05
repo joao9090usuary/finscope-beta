@@ -4,10 +4,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 XDG_CACHE_HOME=/tmp \
 WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-RUN groupadd --system finscope && useradd --system --gid finscope --home-dir /app finscope
-COPY --chown=finscope:finscope . .
-RUN mkdir -p /tmp/finscope-yfinance && chown -R finscope:finscope /tmp/finscope-yfinance
-USER finscope
+RUN groupadd --system revo && useradd --system --gid revo --home-dir /app revo
+COPY --chown=revo:revo . .
+RUN mkdir -p /tmp/revo-yfinance && chown -R revo:revo /tmp/revo-yfinance
+USER revo
 EXPOSE 8501
 HEALTHCHECK CMD ["python", "-c", "import os, urllib.request; urllib.request.urlopen('http://localhost:' + os.getenv('PORT', '8501') + '/_stcore/health')"]
 CMD ["sh", "-c", "streamlit run streamlit_app.py --server.address=0.0.0.0 --server.port=${PORT:-8501}"]

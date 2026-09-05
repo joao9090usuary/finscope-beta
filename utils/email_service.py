@@ -44,9 +44,9 @@ def _as_bool(name: str, default: bool = False) -> bool:
 
 def _sender_identity() -> tuple[str, str]:
     """Valida e separa o nome e o endereço configurados para o remetente."""
-    raw_sender = os.getenv("EMAIL_FROM", "FinScope <no-reply@finscope.local>").strip()
+    raw_sender = os.getenv("EMAIL_FROM", "Revo <no-reply@revo.local>").strip()
     name, address = parseaddr(raw_sender)
-    clean_name = " ".join(unicodedata.normalize("NFKC", name or "FinScope").split())
+    clean_name = " ".join(unicodedata.normalize("NFKC", name or "Revo").split())
     normalized_address = unicodedata.normalize("NFKC", address).strip().lower()
     if (
         not 1 <= len(clean_name) <= 80
@@ -146,14 +146,14 @@ def _send_auth_email(email: str, purpose: str) -> DeliveryResult:
     parameter = "verify" if purpose == "verify" else "reset"
     link = f"{base_url}/?{urlencode({parameter: raw})}"
     if purpose == "verify":
-        subject = "Confirme seu e-mail no FinScope"
+        subject = "Confirme seu e-mail no Revo"
         body = (
             f"Olá, {name}!\n\n"
             f"Confirme seu e-mail acessando o link abaixo:\n{link}\n\n"
             "O link expira em 24 horas e pode ser usado uma única vez."
         )
     else:
-        subject = "Redefina sua senha do FinScope"
+        subject = "Redefina sua senha do Revo"
         body = (
             f"Olá, {name}!\n\n"
             f"Redefina sua senha acessando o link abaixo:\n{link}\n\n"
@@ -205,14 +205,14 @@ def send_feedback_email(sender_email: str, sender_name: str, comment: str) -> De
         raise ValueError("Escreva um comentário entre 10 e 2.000 caracteres, sem marcação HTML.")
 
     body = (
-        "Novo comentário recebido pelo FinScope Beta\n\n"
+        "Novo comentário recebido pelo Revo Beta\n\n"
         f"Participante: {safe_name}\n"
         f"E-mail para resposta: {safe_sender}\n\n"
         "Comentário:\n"
         f"{safe_comment}\n"
     )
     try:
-        _send_email(recipient, "Novo comentário do FinScope Beta", body)
+        _send_email(recipient, "Novo comentário do Revo Beta", body)
         return DeliveryResult(True, "Comentário enviado com sucesso.")
     except Exception:
         return DeliveryResult(
@@ -235,16 +235,16 @@ def send_weekly_summary_email(
     def money(value: float) -> str:
         return f"R$ {value:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
-    subject = "Seu resumo semanal do FinScope"
+    subject = "Seu resumo semanal do Revo"
     body = (
         f"Olá, {name}!\n\n"
-        "Este é o resumo dos últimos sete dias no FinScope:\n"
+        "Este é o resumo dos últimos sete dias no Revo:\n"
         f"- Receitas: {money(summary['income'])}\n"
         f"- Despesas: {money(summary['expense'])}\n"
         f"- Saldo: {money(summary['balance'])}\n\n"
-        "Acesse o FinScope para consultar os detalhes. Você pode desativar este "
+        "Acesse o Revo para consultar os detalhes. Você pode desativar este "
         "e-mail em Minha conta.\n\n"
-        "Mensagem automática da beta fechada do FinScope."
+        "Mensagem automática da beta fechada do Revo."
     )
     try:
         _send_email(email, subject, body)

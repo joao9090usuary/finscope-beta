@@ -138,7 +138,7 @@ class DashboardTest(unittest.TestCase):
         self.assertTrue(pdf_bytes.startswith(b"%PDF"))
         reader = PdfReader(BytesIO(pdf_bytes))
         text = "\n".join(page.extract_text() or "" for page in reader.pages)
-        self.assertIn("FinScope", text)
+        self.assertIn("Revo", text)
         self.assertIn("Pessoa Dashboard A", text)
         self.assertIn("Movimentações do período", text)
 

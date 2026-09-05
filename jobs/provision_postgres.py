@@ -83,6 +83,7 @@ def main() -> None:
     """Provisiona o papel e executa migrações com a credencial proprietária."""
     migration_url = _required_secret("MIGRATION_DATABASE_URL")
     role_password = _required_secret("POSTGRES_APP_PASSWORD")
+    # O nome legado e um identificador interno do banco, nao a marca do produto.
     role_name = os.getenv("APP_DATABASE_ROLE", "finscope_app").strip()
     provision_runtime_role(migration_url, role_name, role_password)
 
